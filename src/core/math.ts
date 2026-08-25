@@ -1,8 +1,21 @@
 export class DixonColes {
     static poisson(k:number, l:number):number { if (l <= 0) return k === 0 ? 1 : 0; if (k < 0) return 0; let logFact = 0; for (let i = 2; i <= k; i++) logFact += Math.log(i); return Math.exp(k * Math.log(l) - l - logFact); }
     static tau(x:number, y:number, l:number, m:number, r:number):number { let v = 1; if (x === 0 && y === 0) v = 1 - (l * m * r); else if (x === 0 && y === 1) v = 1 + (l * r); else if (x === 1 && y === 0) v = 1 + (m * r); else if (x === 1 && y === 1) v = 1 - r; return Math.max(0.0001, v); }
+    static applyOverdispersion(lambda: number, mu: number, phi: number = 1.5): { l: number, m: number } {
+        // Inflates variance slightly to account for unpredictable high-scoring blowouts
+        // phi = 1.5 is a standard empirical starting point for football totals
+        const lAdj = lambda * (1 + (lambda / phi));
+        const mAdj = mu * (1 + (mu / phi));
+        return { l: lAdj, m: mAdj };
+    }
+
     static calculateScoreMatrix(hL:number, aM:number, r:number = -0.11, max:number = 8):number[][] { 
-        const m = Array.from({ length: max + 1 }, (_, h) => Array.from({ length: max + 1 }, (_, a) => this.poisson(h, hL) * this.poisson(a, aM) * this.tau(h, a, hL, aM, r))); 
+        const adj = this.applyOverdispersion(hL, aM);
+        const m = Array.from({ length: max + 1 }, (_, h) => 
+            Array.from({ length: max + 1 }, (_, a) => 
+                this.poisson(h, adj.l) * this.poisson(a, adj.m) * this.tau(h, a, adj.l, adj.m, r)
+            )
+        ); 
         const s = m.reduce((acc, row) => acc + row.reduce((ra, p) => ra + p, 0), 0);
         return m.map(row => row.map(p => p / (s || 1)));
     }
@@ -20,27 +33,24 @@ export class DixonColes {
         }
         return { rho: r, sigmaRho: fC < 0 ? Math.sqrt(-1 / fC) : 0.05 };
     }
-}
-export class MonteCarloSimulator {
-    static run(hL:number, aM:number, threshold:number = 1.5, isUnder:boolean = false, rho:number = -0.11, iters:number = 10000) {
-        const matrix = DixonColes.calculateScoreMatrix(hL, aM, rho);
-        const flat: { hit: boolean, p: number }[] = [];
-        for (let h = 0; h <= 8; h++) {
-            for (let a = 0; a <= 8; a++) {
-                flat.push({ hit: isUnder ? (h + a < threshold) : (h + a > threshold), p: matrix[h][a] });
+
+    static calculateOver15Probability(matrix: number[][]): number {
+        // Over 1.5 is simply 1 minus the probability of 0-0, 1-0, and 0-1
+        const p00 = matrix[0][0];
+        const p10 = matrix[1][0];
+        const p01 = matrix[0][1];
+        return 1 - (p00 + p10 + p01);
+    }
+
+    static calculateUnder35Probability(matrix: number[][]): number {
+        // Sum all cells where home + away goals <= 3
+        let prob = 0;
+        for (let h = 0; h <= 3; h++) {
+            for (let a = 0; a <= (3 - h); a++) {
+                prob += matrix[h][a];
             }
         }
-        let hits = 0;
-        for (let i = 0; i < iters; i++) {
-            const r = Math.random(); let c = 0;
-            for (const cell of flat) {
-                c += cell.p;
-                if (r <= c) { if (cell.hit) hits++; break; }
-            }
-        }
-        const m = hits / iters;
-        const ci95 = 1.96 * Math.sqrt((m * (1 - m)) / iters);
-        return { mean: m, median: m, confidenceInterval: [m - ci95, m + ci95] };
+        return prob;
     }
 }
 

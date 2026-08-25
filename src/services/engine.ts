@@ -1,5 +1,5 @@
 import { TeamStats, MatchContext, AnalysisResult } from '../types';
-import { DixonColes, MonteCarloSimulator } from '../core/math';
+import { DixonColes } from '../core/math';
 import { MatchContextService } from './matchContext';
 import { DATA_CONSTANTS, LEAGUE_CONFIGS, BAYESIAN_CONFIG } from '../core/constants';
 
@@ -24,25 +24,15 @@ export class MatchEngine {
 
         const hM = (home.clinicalEdge || 0), aM_ = (away.clinicalEdge || 0);
         hL *= (1 + Math.sign(hM) * Math.min(Math.sqrt(Math.abs(hM)), DATA_CONSTANTS.MOMENTUM_CAP));
-        aM *= (1 + Math.sign(aM_) * Math.min(Math.sqrt(Math.abs(aM_)), DATA_CONSTANTS.MOMENTUM_CAP)) * MatchContextService.calculateTravelFatigue(home.name.toUpperCase(), away.name.toUpperCase());
+        aM *= (1 + Math.sign(aM_) * Math.min(Math.sqrt(Math.abs(aM_)), DATA_CONSTANTS.MOMENTUM_CAP));
 
-        if (context.referee && context.referee.gamesOfficiated) { 
-            const leagueAvgPen = 0.2;
-            const k = DATA_CONSTANTS.SHRINKAGE_K; // 12
-            const n = context.referee.gamesOfficiated;
-            const raw = context.referee.avgPenaltiesPerGame;
-            // Shrink toward league average: more games = more trust in raw data
-            const shrunk = (n * raw + k * leagueAvgPen) / (n + k);
-            const rE = 1 + (shrunk - leagueAvgPen) * 0.2;
-            hL *= rE; aM *= rE; 
-        }
         
 
 
 
         const matrix = DixonColes.calculateScoreMatrix(hL, aM, rhoData.rho);
-        const pO15_raw = DixonColes.calculateOverUnder(matrix, 1.5);
-        const pU35_raw = 1 - DixonColes.calculateOverUnder(matrix, 3.5);
+        const pO15_raw = DixonColes.calculateOver15Probability(matrix);
+        const pU35_raw = DixonColes.calculateUnder35Probability(matrix);
         
         // --- DYNAMIC OVERROUND REMOVAL ---
         const oddsO15 = context.marketOdds?.pinnacleOver15 || 1.50;
@@ -85,18 +75,16 @@ export class MatchEngine {
         const p_bet = mP_raw + edge; // Probability used for stake calculation
         const b = mOdds - 1;
         
-        // --- IMPROVED: Kelly scaling based on data purity and edge magnitude ---
-        const kellyFraction = 0.15 * purity * (0.5 + (edge / 0.12));
-        const stake = Math.max(0, (b * p_bet - (1 - p_bet)) / b) * kellyFraction; 
+        // Simple, robust Quarter-Kelly to prevent ruin during variance
+        const kellyFraction = 0.25; 
+        const stake = Math.max(0, ((b * p_bet) - (1 - p_bet)) / b) * kellyFraction; 
         const hasEdge = edge > 0.025; // Professional threshold
-
-        const sim = MonteCarloSimulator.run(hL, aM, type === 'UNDER_35' ? 3.5 : 1.5, type === 'UNDER_35', rhoData.rho);
         
         return {
             probability: Math.round(p * 100),
             summary: hasEdge ? `Edge detected. Model sees ${Math.round(p * 100)}% true probability. Market implies ${Math.round(mP * 100)}%.` : `No Edge. Market odds (${mOdds.toFixed(2)}) are efficient.`,
             homeStats: home, awayStats: away, homeXG: hL, awayXG: aM,
-            minimumExpectancy: sim.confidenceInterval[0], potentialCeiling: sim.confidenceInterval[1],
+            minimumExpectancy: p, potentialCeiling: p,
             predictionType: type, predictionLabel: type === 'OVER_15' ? 'Over 1.5 Goals' : 'Under 3.5 Goals',
             marketOdds: mOdds, marketImpliedProb: Math.round(mP * 100), edge: Math.round(edge * 100), 
             recommendedStake: Math.round(stake * 1000) / 10, verdict: hasEdge ? 'EXECUTE_BET' : 'NO_BET',
