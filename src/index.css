@@ -1,0 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+@tailwind base; @tailwind components; @tailwind utilities;
+@layer base {
+  body { @apply bg-black text-emerald-500 font-mono selection:bg-emerald-500/20 uppercase overflow-x-hidden; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-black; }
+  ::-webkit-scrollbar-thumb { @apply bg-emerald-950 rounded-full hover:bg-emerald-800 transition-colors; }
+}
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }

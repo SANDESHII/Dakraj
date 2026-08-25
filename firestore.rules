@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Verified match history is public read for the engine
+    // Write access restricted to backend/admin processes
+    match /historicalMatches/{matchId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    match /team_profiles/{profileId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    match /referee_profiles/{refereeId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    match /analysis_cache/{cacheId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

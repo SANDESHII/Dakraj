@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "HistoricalMatch": {
+      "title": "Historical Match",
+      "description": "Verified historical match logs for performance analysis",
+      "type": "object",
+      "properties": {
+        "homeTeam": { "type": "string" },
+        "awayTeam": { "type": "string" },
+        "homeScore": { "type": "number" },
+        "awayScore": { "type": "number" },
+        "homeXG": { "type": "number" },
+        "awayXG": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "league": { "type": "string" },
+        "season": { "type": "string" },
+        "metrics": {
+          "type": "object",
+          "description": "Match performance metrics",
+          "properties": {
+            "possession": { "type": "number" },
+            "shotsOnTarget": { "type": "number" },
+            "corners": { "type": "number" }
+          }
+        }
+      },
+      "required": ["homeTeam", "awayTeam", "homeScore", "awayScore", "date", "league"]
+    },
+    "RefereeProfile": {
+      "title": "Referee Profile",
+      "description": "Verified statistics for officials to prevent AI hallucination",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "avgCardsPerGame": { "type": "number" },
+        "avgPenaltiesPerGame": { "type": "number" },
+        "homeWinRate": { "type": "number" },
+        "tendency": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "TeamProfile": {
+      "title": "Team Profile",
+      "description": "Cached tactical archetypes and consistency scores",
+      "type": "object",
+      "properties": {
+        "teamName": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "purityScore": { "type": "number" },
+        "baselineLambda": { "type": "number" },
+        "baselineMu": { "type": "number" }
+      },
+      "required": ["teamName"]
+    },
+    "AnalysisCache": {
+      "title": "Analysis Cache",
+      "description": "Persistent cache for Gemini analysis results to prevent RPM limits",
+      "type": "object",
+      "properties": {
+        "result": { "type": "object", "description": "The AnalysisResult object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["result", "timestamp"]
+    }
+  },
+  "firestore": {
+    "historicalMatches/{matchId}": {
+      "schema": "HistoricalMatch",
+      "description": "Collection of historical match data"
+    },
+    "referee_profiles/{refId}": {
+      "schema": "RefereeProfile",
+      "description": "Collection of referee statistics"
+    },
+    "team_profiles/{teamId}": {
+      "schema": "TeamProfile",
+      "description": "Collection of team tactical profiles"
+    },
+    "analysis_cache/{cacheId}": {
+      "schema": "AnalysisCache",
+      "description": "Collection of cached analysis results"
+    }
+  }
+}
