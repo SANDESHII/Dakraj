@@ -47,8 +47,8 @@ export const BacktestDisplay: React.FC = () => {
         <div className="space-y-12">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
                 <div className="space-y-2">
-                    <h3 className="text-sm font-bold text-neutral-500 uppercase tracking-wider">Neural Integrity Audit</h3>
-                    <p className="text-3xl font-bold text-white tracking-tight uppercase">Stochastic Audit</p>
+                    <h3 className="text-sm font-bold text-neutral-500 uppercase tracking-wider">Historical Performance</h3>
+                    <p className="text-3xl font-bold text-white tracking-tight uppercase">Backtest Audit</p>
                 </div>
                 <div className="flex flex-wrap gap-4 w-full md:w-auto">
                     <button 
@@ -73,7 +73,7 @@ export const BacktestDisplay: React.FC = () => {
                         ) : (
                             <Play className="w-4 h-4 fill-current transition-transform group-hover:scale-110" />
                         )}
-                        {loading ? 'Simulating...' : 'Run Simulation'}
+                        {loading ? 'Processing...' : 'Run Audit'}
                     </button>
                 </div>
             </div>

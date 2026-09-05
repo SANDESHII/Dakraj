@@ -1,9 +1,10 @@
 import { db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { TeamStyleProfile, MatchHistory } from '../types';
-import { LEAGUE_CONVERSION_RATES, DATA_CONSTANTS } from '../core/constants';
+import { LEAGUE_CONVERSION_RATES } from '../core/constants';
 import { ELITE_TEAMS, STRONG_TEAMS } from '../core/archetypes';
 import { ArchetypeEngine } from '../core/archetypeEngine';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 
 export class ProfileService {
     private static readonly MAP: Record<string, string[]> = {
@@ -56,53 +57,57 @@ export class ProfileService {
         }
 
         // 4. Calculate Empirical Stats from specific history
-        let wGS = 0, wGA = 0, tW = 0, cs = 0, tR = 0, tD = 0;
+        let wGS = 0, wGA = 0, tW = 0, cs = 0;
         rel.forEach(m => {
             const w = (m as any).weight || 1;
             const h = m.homeTeam === id;
-            const sc = h ? (m.homeGoals ?? 0) : (m.awayGoals ?? 0);
-            const co = h ? (m.awayGoals ?? 0) : (m.homeGoals ?? 0);
-            const r = h ? (m.homeRedCards || 0) : (m.awayRedCards || 0);
+            const co = h ? (m.awayGoals || 0) : (m.homeGoals || 0);
             const s = h ? (m.homeShotsOnTarget || 0) : (m.awayShotsOnTarget || 0);
             const rate = LEAGUE_CONVERSION_RATES[m.league || 'STANDARD'] || LEAGUE_CONVERSION_RATES.STANDARD;
             const xG = (h ? m.homeXG : m.awayXG) ?? (s * rate);
             const oXG = (h ? m.awayXG : m.homeXG) ?? ((h ? m.awayShotsOnTarget : m.homeShotsOnTarget) || 0) * rate;
-            wGS += xG * w; wGA += oXG * w; tW += w; tR += r; tD += (sc - xG); if (co === 0) cs++;
+            wGS += xG * w; wGA += oXG * w; tW += w; if (co === 0) cs++;
         });
 
         // 5. Apply Bayesian Shrinkage (Shrink toward Archetype)
-        // K = 10 (Trust the team more after 10 games)
         const K = 10;
         const n = rel.length;
         const purity = Math.min(1, n / 15);
-        const totalGoals = history.reduce((a, m) => a + (m.homeGoals ?? 0) + (m.awayGoals ?? 0), 0);
-        const lAvg = history.length ? (totalGoals / (history.length * 2)) : DATA_CONSTANTS.DEFAULT_LEAGUE_AVG;
 
         const blendedXG = (wGS + K * archetype.npxG) / (n + K);
         const blendedXGA = (wGA + K * archetype.avgXGA) / (n + K);
-        const blendedCS = (cs + (K / 5) * archetype.cleanSheets) / (n + (K / 5)); // Lower K for noisy CS stat
+        const blendedCS = (cs + (K / 5) * archetype.cleanSheets) / (n + (K / 5)); 
         
         return { 
             name, 
             npxG: blendedXG, 
             avgXGA: blendedXGA, 
-            defensiveStability: Math.max(0.3, Math.min(0.9, 1 - (blendedXGA / (lAvg * 2)))), 
             purity: purity, 
-            redCardPropensity: tR / Math.max(1, rel.length), 
-            clinicalEdge: tD / (Math.max(1, rel.length) + DATA_CONSTANTS.SHRINKAGE_K),
-            form: rel.slice(-5).map(m => {
-                const h = m.homeTeam === id;
-                const rate = LEAGUE_CONVERSION_RATES[m.league || 'STANDARD'] || LEAGUE_CONVERSION_RATES.STANDARD;
-                const tXG = (h ? m.homeXG : m.awayXG) ?? ((h ? m.homeShotsOnTarget : m.awayShotsOnTarget) || 0) * rate;
-                const oXG = (h ? m.awayXG : m.homeXG) ?? ((h ? m.awayShotsOnTarget : m.homeShotsOnTarget) || 0) * rate;
-                if (tXG > oXG + 0.5) return 1.0;
-                if (tXG < oXG - 0.5) return 0.0;
-                return 0.5;
-            }), 
             cleanSheets: blendedCS
         };
     }
 
-    static async getStyle(id: string): Promise<TeamStyleProfile | null> { const s = await getDoc(doc(db, 'team_style_profiles', id)); return s.exists() ? s.data() as TeamStyleProfile : null; }
-    static async saveStyle(p: TeamStyleProfile) { await setDoc(doc(db, 'team_style_profiles', p.teamId), p, { merge: true }); }
+    static async getStyle(id: string): Promise<TeamStyleProfile | null> { 
+        const COLLECTION = 'team_style_profiles';
+        try {
+            const s = await getDoc(doc(db, COLLECTION, id)); 
+            return s.exists() ? s.data() as TeamStyleProfile : null; 
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('permission')) {
+                handleFirestoreError(error, OperationType.GET, COLLECTION);
+            }
+            throw error;
+        }
+    }
+    static async saveStyle(p: TeamStyleProfile) { 
+        const COLLECTION = 'team_style_profiles';
+        try {
+            await setDoc(doc(db, COLLECTION, p.teamId), p, { merge: true }); 
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('permission')) {
+                handleFirestoreError(error, OperationType.WRITE, COLLECTION);
+            }
+            throw error;
+        }
+    }
 }

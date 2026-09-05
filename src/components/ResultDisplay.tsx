@@ -1,11 +1,10 @@
 
 import React from 'react';
 import { Zap, Shield, Target, Activity, LucideIcon, Binary } from 'lucide-react';
-import { AnalysisResult, AnalysisConfidence } from '../types';
+import { AnalysisResult } from '../types';
 
 interface ResultGridProps {
     analysis: AnalysisResult;
-    surety: AnalysisConfidence;
 }
 
 const StatCard: React.FC<{ label: string; value: string | number; subValue?: string; icon: LucideIcon }> = ({ label, value, subValue, icon: Icon }) => (
@@ -48,7 +47,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                     {/* Primary Metrics */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <StatCard label="Model Edge" value={`${analysis.edge > 0 ? '+' : ''}${analysis.edge}%`} subValue="Alpha vs Market" icon={Zap} />
-                        <StatCard label="Risk Unit" value={`${analysis.recommendedStake}%`} subValue="Optimal Allocation" icon={Shield} />
+                        <StatCard label="Total xG" value={(analysis.homeXG + analysis.awayXG).toFixed(2)} subValue="Expected Match Goals" icon={Shield} />
                         <StatCard label="Live Odds" value={analysis.marketOdds.toFixed(2)} subValue="True Value Anchor" icon={Target} />
                     </div>
 
@@ -68,18 +67,10 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                                         <span className="text-[10px] font-bold text-neutral-700 uppercase tracking-widest">{item.role}</span>
                                         <h4 className="text-3xl font-black text-white tracking-tighter uppercase">{item.team.name}</h4>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-12">
+                                    <div className="grid grid-cols-1 gap-12">
                                         <div className="space-y-3">
                                             <span className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">Adjusted xG</span>
                                             <p className="text-4xl font-bold text-white tabular-nums tracking-tighter">{item.xG.toFixed(2)}</p>
-                                        </div>
-                                        <div className="space-y-3">
-                                            <span className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">Stability</span>
-                                            <p className="text-4xl font-bold text-emerald-500 tabular-nums tracking-tighter">{item.team.defensiveStability.toFixed(2)}</p>
-                                        </div>
-                                        <div className="space-y-3">
-                                            <span className="text-[10px] text-neutral-600 font-bold uppercase tracking-widest">Tactical Bias</span>
-                                            <p className="text-4xl font-bold text-white tabular-nums tracking-tighter">{item.team.homeAwayBias.toFixed(2)}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -110,7 +101,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                         </div>
                         <p className="text-sm font-medium leading-relaxed">
                             {analysis.verdict === 'EXECUTE_BET' 
-                                ? `Positive Expected Value (+EV) identified. Recommended risk: ${analysis.recommendedStake}% of bankroll.`
+                                ? `Positive Expected Value (+EV) identified within the forensic model parameters.`
                                 : "Market is efficient. No mathematical edge exists. Preserve capital."}
                         </p>
                         
@@ -143,24 +134,11 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                                     <div className="h-full bg-emerald-500" style={{ width: `${analysis.purity}%` }} />
                                 </div>
                             </div>
-                            {analysis.context.referee && (
-                                <div className="pt-6 border-t border-neutral-900 space-y-4">
-                                    <span className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">Referee Influence</span>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-sm font-bold text-white">{analysis.context.referee.name}</span>
-                                        <span className="text-[10px] px-2 py-1 bg-neutral-900 rounded text-neutral-400 font-bold uppercase tracking-tight">
-                                            {analysis.context.referee.tendency}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
                             {analysis.context.audit && (
                                 <div className="pt-6 border-t border-neutral-900 grid grid-cols-2 gap-y-6 gap-x-4">
                                     {[
                                         { label: 'Signal Integrity', value: analysis.context.audit.signalIntegrity },
-                                        { label: 'Variance Mode', value: analysis.context.audit.redCardRegime },
-                                        { label: 'Recency Alpha', value: analysis.context.audit.alphaAdjustment },
-                                        { label: 'Data Fidelity', value: analysis.context.audit.dataReliability }
+                                        { label: 'Sample Size', value: analysis.context.audit.sampleSize.toString() }
                                     ].map((item, i) => (
                                         <div key={i} className="space-y-1">
                                             <span className="text-[9px] font-bold text-neutral-600 uppercase tracking-widest block leading-none">{item.label}</span>

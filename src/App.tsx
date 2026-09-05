@@ -8,6 +8,7 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { AnalysisForm } from './components/AnalysisForm';
 import { ResultGrid } from './components/ResultDisplay';
 import { GroundingLog } from './components/GroundingLog';
+import { SmartScout } from './components/SmartScout';
 import { BacktestDisplay } from './components/BacktestDisplay';
 import { fetchWithTimeout } from './utils';
 import { LOADING_MESSAGES } from './core/constants';
@@ -123,14 +124,19 @@ export const App: React.FC = () => {
                     </motion.div>
                 )}
 
-                {analysis && analysis.surety && !loadingAnalysis && (
+                {analysis && !loadingAnalysis && (
                     <motion.div 
                         initial={{ opacity: 0, y: 40 }} 
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                         className="space-y-16"
                     >
-                        <ResultGrid analysis={analysis} surety={analysis.surety} />
+                        <ResultGrid analysis={analysis} />
+                        <SmartScout 
+                            homeTeam={inputs.home} 
+                            awayTeam={inputs.away} 
+                            league={inputs.league} 
+                        />
                         <GroundingLog context={analysis.context} />
                     </motion.div>
                 )}

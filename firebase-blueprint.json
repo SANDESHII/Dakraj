@@ -41,24 +41,23 @@
     },
     "TeamProfile": {
       "title": "Team Profile",
-      "description": "Cached tactical archetypes and consistency scores",
+      "description": "Cached tactical metrics and archetypes",
       "type": "object",
       "properties": {
-        "teamName": { "type": "string" },
-        "lastUpdated": { "type": "string", "format": "date-time" },
-        "purityScore": { "type": "number" },
-        "baselineLambda": { "type": "number" },
-        "baselineMu": { "type": "number" }
+        "teamId": { "type": "string" },
+        "ppda": { "type": "number" },
+        "possessionFinalThird": { "type": "number" },
+        "purity": { "type": "number" }
       },
-      "required": ["teamName"]
+      "required": ["teamId"]
     },
     "AnalysisCache": {
       "title": "Analysis Cache",
       "description": "Persistent cache for Gemini analysis results to prevent RPM limits",
       "type": "object",
       "properties": {
-        "result": { "type": "object", "description": "The AnalysisResult object" },
-        "timestamp": { "type": "string", "format": "date-time" }
+        "result": { "type": "object" },
+        "timestamp": { "type": "object" }
       },
       "required": ["result", "timestamp"]
     }
@@ -68,11 +67,7 @@
       "schema": "HistoricalMatch",
       "description": "Collection of historical match data"
     },
-    "referee_profiles/{refId}": {
-      "schema": "RefereeProfile",
-      "description": "Collection of referee statistics"
-    },
-    "team_profiles/{teamId}": {
+    "team_style_profiles/{teamId}": {
       "schema": "TeamProfile",
       "description": "Collection of team tactical profiles"
     },

@@ -43,7 +43,7 @@ export class BacktestService {
             if (math.predictionType === 'OVER_15') { ovT++; if (isO) ovC++; }
             if (math.predictionType === 'UNDER_35') { unT++; if (isU) unC++; }
 
-            const edge = math.surety.edgeValue, seg = segments.find(s => edge >= s.min && edge < s.max);
+            const edge = math.edge, seg = segments.find(s => edge >= s.min && edge < s.max);
             if (seg) { seg.count++; if (outcome) seg.hits++; }
 
             results.push({ match: { ...m, actualScore: [m.homeGoals, m.awayGoals] }, prediction: math, isOver15Correct: isO, isUnder35Correct: isU, marketEdge: edge });
@@ -57,7 +57,7 @@ export class BacktestService {
             highPurityBrierScore: hpC > 0 ? hpB / hpC : 0,
             highPurityMatches: hpC,
             edgeSegments: segments.map(s => ({ segment: s.segment, count: s.count, hitRate: s.count > 0 ? s.hits / s.count : 0, avgEdge: s.min / 100 })),
-            calibrationUsed: { baseTrust: BAYESIAN_CONFIG.BASE_TRUST, purityScale: BAYESIAN_CONFIG.PURITY_SCALE },
+            calibrationUsed: { baseTrust: BAYESIAN_CONFIG.BASE_TRUST, purityScale: 0 },
             matches: results
         };
     }

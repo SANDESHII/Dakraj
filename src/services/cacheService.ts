@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { AnalysisResult } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 
 export class CacheService {
     private static COLLECTION = 'analysis_cache';
@@ -22,6 +23,9 @@ export class CacheService {
             }
             return null;
         } catch (error) {
+            if (error instanceof Error && error.message.includes('permission')) {
+                handleFirestoreError(error, OperationType.GET, this.COLLECTION);
+            }
             console.error('Cache Read Error:', error);
             return null;
         }
@@ -35,6 +39,9 @@ export class CacheService {
                 timestamp: serverTimestamp()
             });
         } catch (error) {
+            if (error instanceof Error && error.message.includes('permission')) {
+                handleFirestoreError(error, OperationType.WRITE, this.COLLECTION);
+            }
             console.error('Cache Write Error:', error);
         }
     }

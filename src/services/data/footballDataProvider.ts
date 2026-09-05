@@ -2,7 +2,7 @@ import Papa from 'papaparse';
 import { MatchHistory } from '../../types';
 import { ProfileService } from '../profileService';
 import { fetchWithTimeout, retry } from '../../utils';
-import { FOOTBALL_DATA_CONFIG, LEAGUE_CONVERSION_RATES } from '../../core/constants';
+import { FOOTBALL_DATA_CONFIG } from '../../core/constants';
 
 export class FootballDataProvider {
     static sanitize(v: string | number | null | undefined): number {

@@ -1,6 +1,6 @@
-import express from "express"; import path from "path"; import { createServer as createViteServer } from "vite"; import { BacktestService } from "./src/services/backtestService"; import { DataService } from "./src/services/dataService";
+import express from "express"; import path from "path"; import { createServer as createViteServer } from "vite"; import { BacktestService } from "./src/services/backtestService"; import { DataService } from "./src/services/dataService"; import { CalibrationService } from "./src/services/calibrationService";
 import { performAnalysis } from "./src/services/geminiService";
-import { CalibrationService } from "./src/services/calibrationService";
+import { ScapegraphService } from "./src/services/scapegraphService";
 import rateLimit from "express-rate-limit";
 
 async function startServer() {
@@ -30,8 +30,9 @@ async function startServer() {
   // Protected Routes
   app.post("/api/ingest", auth, async (req, res) => { try { const { league } = req.body; const { matches } = await DataService.getLeagueContext(league || 'EPL'); res.json({ success: true, count: matches.length }); } catch (e) { res.status(500).json({ error: "Sync Failed" }); } });
   app.post("/api/analyze", limiter, auth, async (req, res) => { try { res.json(await performAnalysis(req.body)); } catch (e: any) { res.status(500).json({ error: e.message }); } });
+  app.post("/api/intel", limiter, auth, async (req, res) => { try { res.json(await ScapegraphService.getMatchIntel(req.body)); } catch (e: any) { res.status(500).json({ error: e.message }); } });
   app.get("/api/backtest", auth, async (req, res) => { try { const { league } = req.query; res.json(await BacktestService.runBacktest((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Audit Failed" }); } });
-  app.get("/api/calibrate", auth, async (req, res) => { try { const { league } = req.query; res.json(await CalibrationService.calibrate((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Calibration Failed" }); } });
+  app.get("/api/calibrate", auth, async (req, res) => { try { const { league } = req.query; res.json(await CalibrationService.validate((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Validation Failed" }); } });
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: "spa" }); app.use(vite.middlewares);
     app.get("*all", async (req, res, next) => { if (req.url.startsWith("/api")) return next(); try { const fs = await import("fs"), html = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf-8"), content = await vite.transformIndexHtml(req.url, html); res.status(200).set({ "Content-Type": "text/html" }).end(content); } catch (e) { vite.ssrFixStacktrace(e as Error); next(e); } });

@@ -20,7 +20,8 @@
     "motion": "^12.38.0",
     "papaparse": "^5.5.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "scrapegraph-js": "^2.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
