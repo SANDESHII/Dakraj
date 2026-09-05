@@ -61,7 +61,21 @@ export interface Fixture {
 export interface Citation { source:string; url:string; value:number; timestamp:string; }
 export interface MatchContext { homeStyle?:TeamStyleProfile; awayStyle?:TeamStyleProfile; league?:string; homeSeasonXG?:number; awaySeasonXG?:number; homeSeasonXGA?:number; awaySeasonXGA?:number; date?:string; marketOdds?:{ pinnacleOver15?:number; pinnacleUnder15?:number; pinnacleUnder35?:number; pinnacleOver35?:number; }; groundingLog?:{ citations:Citation[]; varianceAlerts:string[]; }; audit?:{ signalIntegrity:string; sampleSize:number; }; intel?: MatchIntel; }
 export interface MatchHistory { homeTeam:string; awayTeam:string; homeGoals:number; awayGoals:number; homeXG?:number; awayXG?:number; homeShotsOnTarget?:number; awayShotsOnTarget?:number; homeRedCards?:number; awayRedCards?:number; date:string; league?:string; weight?:number; isVerified?: boolean; }
-export interface AnalysisResult { probability:number; summary:string; homeStats:TeamStats; awayStats:TeamStats; homeXG:number; awayXG:number; predictionType:'OVER_15'|'UNDER_35'|'NO_BET'; predictionLabel:string; purity:number; signalStrength:number; marketOdds:number; marketImpliedProb:number; edge:number; verdict:'EXECUTE_BET'|'NO_BET'; context:MatchContext; dataSource:'LIVE'|'FALLBACK_STATIC'; }
+export interface AnalysisResult { probability:number; summary:string; homeStats:TeamStats; awayStats:TeamStats; homeXG:number; awayXG:number; predictionType:'OVER_15'|'UNDER_35'|'NO_BET'; predictionLabel:string; purity:number; signalStrength:number; marketOdds:number; marketImpliedProb:number; edge:number; verdict:'EXECUTE_BET'|'NO_BET'; context:MatchContext; dataSource:'LIVE'|'FALLBACK_STATIC' | 'BLOCKED_LOW_QUALITY'; dataQuality?: DataQualityReport; }
+
+export interface DataQualityReport {
+    overall: 'CLEAN' | 'DEGRADED' | 'UNRELIABLE';
+    confidence: number;
+    shouldProceed: boolean;
+    warnings: string[];
+    metrics: {
+        intel: 'ok' | 'failed' | 'partial';
+        homeXG: 'ok' | 'failed' | 'missing';
+        awayXG: 'ok' | 'failed' | 'missing';
+        oddsCount: number;
+        hasForm: boolean;
+    };
+}
 
 export interface RhoData {
     rho: number;

@@ -5,6 +5,7 @@ import { ProfileService } from "./profileService";
 import { FootballDataProvider } from "./data/footballDataProvider";
 import { CacheService } from "./cacheService";
 import { ScapegraphService } from "./scapegraphService";
+import { DataQuality } from "./dataQuality";
 import { AnalysisResult, MatchHistory, LeagueContext, RhoData } from "../types";
 
 const MODEL = 'gemini-3.7-flash', SYSTEM_PROMPT = `Expert Quantitative Football Intelligence Analyst. MISSION: Rigorous Tactical Grounding for Europe's Top 5 Leagues & UCL. 
@@ -74,6 +75,21 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
     const scrapedOdds = fullContext?.odds || [];
     const homeXGData = fullContext?.homeXG || null;
     const awayXGData = fullContext?.awayXG || null;
+    const homeForm = fullContext?.homeForm || [];
+    const awayForm = fullContext?.awayForm || [];
+
+    // Run Quality Validation
+    const quality = DataQuality.validate(intel, homeXGData, awayXGData, scrapedOdds, homeForm, awayForm);
+    
+    if (!quality.shouldProceed) {
+        const fallback = await getFallback(req, matches, rho);
+        return {
+            ...fallback,
+            summary: `[QUALITY BLOCKED] Analysis halted due to unreliable data: ${quality.warnings.join(' ')}`,
+            dataSource: 'BLOCKED_LOW_QUALITY',
+            dataQuality: quality
+        };
+    }
 
     // Best available odds (prefer Pinnacle, fallback to average)
     const bestOdds = scrapedOdds.length > 0 ? (() => {
@@ -99,10 +115,11 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
         const oddsContext = bestOdds
             ? `| SCRAPED ODDS: Over1.5=${bestOdds.pinnacleOver15} Under1.5=${bestOdds.pinnacleUnder15} Over3.5=${bestOdds.pinnacleOver35} Under3.5=${bestOdds.pinnacleUnder35}`
             : '';
+        const formContext = `| FORM: Home Last 5=${JSON.stringify(homeForm.slice(0, 3))} | Away Last 5=${JSON.stringify(awayForm.slice(0, 3))}`;
 
         const interactionPromise = ai.interactions.create({
             model: MODEL, system_instruction: SYSTEM_PROMPT,
-            input: `MATCH: ${req.homeTeamName} vs ${req.awayTeamName} | KICKOFF: ${req.kickoff || 'UPCOMING'} | MANDATE: Fetch hard npxG stats. Sync Market. ${intelContext} ${xgContext} ${oddsContext}`,
+            input: `MATCH: ${req.homeTeamName} vs ${req.awayTeamName} | KICKOFF: ${req.kickoff || 'UPCOMING'} | MANDATE: Fetch hard npxG stats. Sync Market. ${intelContext} ${xgContext} ${oddsContext} ${formContext}`,
             tools: [{ type: 'google_search' }], response_format: AI_SCHEMA as any
         });
 
@@ -139,6 +156,7 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
             }, rho);
 
         res.summary = p.matchSummary || res.summary;
+        res.dataQuality = quality;
         
         // Save to Persistent Cache
         await CacheService.set(key, res);

@@ -1,6 +1,7 @@
 import express from "express"; import path from "path"; import { createServer as createViteServer } from "vite"; import { BacktestService } from "./src/services/backtestService"; import { DataService } from "./src/services/dataService"; import { CalibrationService } from "./src/services/calibrationService";
 import { performAnalysis } from "./src/services/geminiService";
 import { ScapegraphService } from "./src/services/scapegraphService";
+import { DataQuality } from "./src/services/dataQuality";
 import rateLimit from "express-rate-limit";
 
 async function startServer() {
@@ -85,6 +86,15 @@ async function startServer() {
           const { homeTeam, awayTeam, homeSlug, awaySlug, league } = req.body;
           const context = await ScapegraphService.getFullMatchContext(homeTeam, awayTeam, homeSlug, awaySlug, league || 'EPL');
           res.json({ success: true, ...context });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/quality", auth, async (req, res) => {
+      try {
+          const { homeTeam, awayTeam, homeSlug, awaySlug, league } = req.body;
+          const ctx = await ScapegraphService.getFullMatchContext(homeTeam, awayTeam, homeSlug, awaySlug, league || 'EPL');
+          const report = DataQuality.validate(ctx.intel, ctx.homeXG, ctx.awayXG, ctx.odds, ctx.homeForm, ctx.awayForm);
+          res.json({ success: true, report });
       } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
   app.get("/api/backtest", auth, async (req, res) => { try { const { league } = req.query; res.json(await BacktestService.runBacktest((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Audit Failed" }); } });
