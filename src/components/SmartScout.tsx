@@ -8,12 +8,13 @@ interface SmartScoutProps {
     homeTeam: string;
     awayTeam: string;
     league: string;
+    initialIntel?: MatchIntel;
 }
 
-export const SmartScout: React.FC<SmartScoutProps> = ({ homeTeam, awayTeam, league }) => {
-    const [intel, setIntel] = useState<MatchIntel | null>(null);
+export const SmartScout: React.FC<SmartScoutProps> = ({ homeTeam, awayTeam, league, initialIntel }) => {
+    const [intel, setIntel] = useState<MatchIntel | null>(initialIntel || null);
     const [loading, setLoading] = useState(false);
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(!!initialIntel);
 
     const fetchIntel = async () => {
         setLoading(true);

@@ -136,6 +136,7 @@ export const App: React.FC = () => {
                             homeTeam={inputs.home} 
                             awayTeam={inputs.away} 
                             league={inputs.league} 
+                            initialIntel={analysis.context.intel}
                         />
                         <GroundingLog context={analysis.context} />
                     </motion.div>

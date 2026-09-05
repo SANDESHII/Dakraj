@@ -4,6 +4,7 @@ import { DataService } from "./dataService";
 import { ProfileService } from "./profileService";
 import { FootballDataProvider } from "./data/footballDataProvider";
 import { CacheService } from "./cacheService";
+import { ScapegraphService } from "./scapegraphService";
 import { AnalysisResult, MatchHistory, LeagueContext, RhoData } from "../types";
 
 const MODEL = 'gemini-3.7-flash', SYSTEM_PROMPT = `Expert Quantitative Football Intelligence Analyst. MISSION: Rigorous Tactical Grounding for Europe's Top 5 Leagues & UCL. 
@@ -60,16 +61,18 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
         audit: { signalIntegrity: '0%', sampleSize: 0 }
     }));
     const matches = ctx.matches, rho = ctx.rhoData;
+    const intel = await ScapegraphService.getMatchIntel({ homeTeam: req.homeTeamName, awayTeam: req.awayTeamName, league: req.league }).catch(() => null);
 
     try {
+        const intelContext = intel ? `| REAL-TIME INTEL: ${JSON.stringify(intel)}` : '';
         const interactionPromise = ai.interactions.create({
             model: MODEL, system_instruction: SYSTEM_PROMPT,
-            input: `MATCH: ${req.homeTeamName} vs ${req.awayTeamName} | KICKOFF: ${req.kickoff || 'UPCOMING'} | MANDATE: Fetch hard npxG stats. Sync Market.`,
+            input: `MATCH: ${req.homeTeamName} vs ${req.awayTeamName} | KICKOFF: ${req.kickoff || 'UPCOMING'} | MANDATE: Fetch hard npxG stats. Sync Market. ${intelContext}`,
             tools: [{ type: 'google_search' }], response_format: AI_SCHEMA as any
         });
 
         const timeout = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Analysis Timeout: Research phase exceeded 10s limit.')), 10000)
+            setTimeout(() => reject(new Error('Analysis Timeout: Research phase exceeded 15s limit.')), 15000)
         );
 
         const interaction = await Promise.race([interactionPromise, timeout]);
@@ -85,14 +88,15 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
             DataService.standardize({ ...ProfileService.computeBaseline(req.awayTeam, matches, asOf), name: req.awayTeamName }), 
             { 
                 homeStyle: { ...(hS || {}), ...(p.styleMetrics?.home || {}), teamId: req.homeTeam }, awayStyle: { ...(aS || {}), ...(p.styleMetrics?.away || {}), teamId: req.awayTeam }, league: req.league,
-                homeSeasonXG: p.verifiedFacts?.homeSeasonXG, awaySeasonXG: p.verifiedFacts?.awaySeasonXG, homeSeasonXGA: p.verifiedFacts?.homeSeasonXGA, awaySeasonXGA: p.verifiedFacts?.pinnacleUnder15, // Wait, wrong field? No, p.verifiedFacts?.homeSeasonXGA
+                homeSeasonXG: p.verifiedFacts?.homeSeasonXG, awaySeasonXG: p.verifiedFacts?.awaySeasonXG, homeSeasonXGA: p.verifiedFacts?.homeSeasonXGAs, awaySeasonXGA: p.verifiedFacts?.awaySeasonXGA,
                 marketOdds: { 
                     pinnacleOver15: p.verifiedFacts?.pinnacleOver15, 
                     pinnacleUnder15: p.verifiedFacts?.pinnacleUnder15,
                     pinnacleUnder35: p.verifiedFacts?.pinnacleUnder35,
                     pinnacleOver35: p.verifiedFacts?.pinnacleOver35
                 },
-                groundingLog: { citations: p.verifiedFacts?.citations || [], varianceAlerts: p.verifiedFacts?.varianceAlerts || [] }
+                groundingLog: { citations: p.verifiedFacts?.citations || [], varianceAlerts: p.verifiedFacts?.varianceAlerts || [] },
+                intel: intel || undefined
             }, rho);
 
         res.summary = p.matchSummary || res.summary;

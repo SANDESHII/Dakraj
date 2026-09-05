@@ -1,19 +1,6 @@
 
 import { ScrapeGraphAI, ScrapeGraphAIClient } from 'scrapegraph-js';
-
-export interface IntelRequest {
-    homeTeam: string;
-    awayTeam: string;
-    league: string;
-}
-
-export interface MatchIntel {
-    injuries: { team: string; player: string; status: string; impact: string }[];
-    tacticalNews: string[];
-    lineupRumors: { team: string; predictedLineup: string[] }[];
-    weatherImpact: string;
-    marketSentiment: string;
-}
+import { MatchIntel, IntelRequest } from '../types';
 
 export class ScapegraphService {
     private static client: ScrapeGraphAIClient | null = null;
