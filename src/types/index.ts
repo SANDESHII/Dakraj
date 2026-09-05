@@ -7,6 +7,57 @@ export interface MatchIntel {
     weatherImpact: string;
     marketSentiment: string;
 }
+export interface IntelRequest {
+    homeTeam: string;
+    awayTeam: string;
+    league: string;
+}
+export interface MatchOdds {
+    bookmaker: string;
+    over15: number;
+    under15: number;
+    over35: number;
+    under35: number;
+}
+export interface TeamXGData {
+    team: string;
+    season: string;
+    xG: number;
+    xGA: number;
+    npxG: number;
+    matches: number;
+    source: string;
+}
+export interface ScrapedHistoricalMatch {
+    date: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeGoals: number;
+    awayGoals: number;
+    homeXG?: number;
+    awayXG?: number;
+    league: string;
+    season: string;
+}
+export interface LeagueStanding {
+    team: string;
+    played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    points: number;
+    xG: number;
+    xGA: number;
+}
+export interface Fixture {
+    date: string;
+    time: string;
+    homeTeam: string;
+    awayTeam: string;
+    league: string;
+}
 export interface Citation { source:string; url:string; value:number; timestamp:string; }
 export interface MatchContext { homeStyle?:TeamStyleProfile; awayStyle?:TeamStyleProfile; league?:string; homeSeasonXG?:number; awaySeasonXG?:number; homeSeasonXGA?:number; awaySeasonXGA?:number; date?:string; marketOdds?:{ pinnacleOver15?:number; pinnacleUnder15?:number; pinnacleUnder35?:number; pinnacleOver35?:number; }; groundingLog?:{ citations:Citation[]; varianceAlerts:string[]; }; audit?:{ signalIntegrity:string; sampleSize:number; }; intel?: MatchIntel; }
 export interface MatchHistory { homeTeam:string; awayTeam:string; homeGoals:number; awayGoals:number; homeXG?:number; awayXG?:number; homeShotsOnTarget?:number; awayShotsOnTarget?:number; homeRedCards?:number; awayRedCards?:number; date:string; league?:string; weight?:number; isVerified?: boolean; }

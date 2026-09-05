@@ -50,50 +50,89 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
     const l = FootballDataProvider.normalizeLeague(raw.league), hM = ProfileService.canonicalize(raw.homeTeam), aM = ProfileService.canonicalize(raw.awayTeam);
     const req = { ...raw, league: l, homeTeam: hM.id, awayTeam: aM.id, homeTeamName: ProfileService.getDisplayName(hM.id), awayTeamName: ProfileService.getDisplayName(aM.id) };
     const key = `${req.homeTeam}-${req.awayTeam}-${req.league}`.toLowerCase();
-    
+
     // Persistent Firestore Cache
     const cached = await CacheService.get(key);
     if (cached) return cached;
 
-    const ctx: LeagueContext = await DataService.getLeagueContext(req.league || 'EPL').catch(() => ({ 
+    const ctx: LeagueContext = await DataService.getLeagueContext(req.league || 'EPL').catch(() => ({
         matches: [], rhoData: { rho: -0.11, sigmaRho: 0.05 },
         defensiveRanks: {}, avgHG: 1.35, avgAG: 1.25, varHG: 1.1, varAG: 1.1,
         audit: { signalIntegrity: '0%', sampleSize: 0 }
     }));
     const matches = ctx.matches, rho = ctx.rhoData;
-    const intel = await ScapegraphService.getMatchIntel({ homeTeam: req.homeTeamName, awayTeam: req.awayTeamName, league: req.league }).catch(() => null);
+
+    // Pull ALL data from ScrapeGraphAI in parallel
+    const fullContext = await ScapegraphService.getFullMatchContext(
+        req.homeTeamName, req.awayTeamName,
+        req.homeTeam.toLowerCase().replace(/\s+/g, '-'),
+        req.awayTeam.toLowerCase().replace(/\s+/g, '-'),
+        req.league || 'EPL'
+    ).catch(() => null);
+
+    const intel = fullContext?.intel || null;
+    const scrapedOdds = fullContext?.odds || [];
+    const homeXGData = fullContext?.homeXG || null;
+    const awayXGData = fullContext?.awayXG || null;
+
+    // Best available odds (prefer Pinnacle, fallback to average)
+    const bestOdds = scrapedOdds.length > 0 ? (() => {
+        const pinnacle = scrapedOdds.find(o => o.bookmaker.toLowerCase().includes('pinnacle'));
+        const avg = (field: 'over15' | 'under15' | 'over35' | 'under35') => {
+            if (pinnacle && (pinnacle as any)[field] > 0) return (pinnacle as any)[field];
+            const valid = scrapedOdds.filter(o => (o as any)[field] > 0);
+            return valid.length > 0 ? valid.reduce((s, o) => s + (o as any)[field], 0) / valid.length : undefined;
+        };
+        return { 
+            pinnacleOver15: avg('over15'), 
+            pinnacleUnder15: avg('under15'), 
+            pinnacleOver35: avg('over35'), 
+            pinnacleUnder35: avg('under35') 
+        };
+    })() : null;
 
     try {
         const intelContext = intel ? `| REAL-TIME INTEL: ${JSON.stringify(intel)}` : '';
+        const xgContext = (homeXGData && awayXGData)
+            ? `| SCRAPED xG DATA: Home ${homeXGData.team} xG=${homeXGData.xG} xGA=${homeXGData.xGA} npxG=${homeXGData.npxG} (${homeXGData.matches} matches, source: ${homeXGData.source}) | Away ${awayXGData.team} xG=${awayXGData.xG} xGA=${awayXGData.xGA} npxG=${awayXGData.npxG} (${awayXGData.matches} matches, source: ${awayXGData.source})`
+            : '';
+        const oddsContext = bestOdds
+            ? `| SCRAPED ODDS: Over1.5=${bestOdds.pinnacleOver15} Under1.5=${bestOdds.pinnacleUnder15} Over3.5=${bestOdds.pinnacleOver35} Under3.5=${bestOdds.pinnacleUnder35}`
+            : '';
+
         const interactionPromise = ai.interactions.create({
             model: MODEL, system_instruction: SYSTEM_PROMPT,
-            input: `MATCH: ${req.homeTeamName} vs ${req.awayTeamName} | KICKOFF: ${req.kickoff || 'UPCOMING'} | MANDATE: Fetch hard npxG stats. Sync Market. ${intelContext}`,
+            input: `MATCH: ${req.homeTeamName} vs ${req.awayTeamName} | KICKOFF: ${req.kickoff || 'UPCOMING'} | MANDATE: Fetch hard npxG stats. Sync Market. ${intelContext} ${xgContext} ${oddsContext}`,
             tools: [{ type: 'google_search' }], response_format: AI_SCHEMA as any
         });
 
-        const timeout = new Promise<never>((_, reject) => 
+        const timeout = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Analysis Timeout: Research phase exceeded 15s limit.')), 15000)
         );
 
         const interaction = await Promise.race([interactionPromise, timeout]);
         const p = JSON.parse(interaction.output_text || '{}');
         const [hS, aS] = await Promise.all([
-            ProfileService.getStyle(req.homeTeam), 
-            ProfileService.getStyle(req.awayTeam)
+            ProfileService.getStyle(req.homeTeam), ProfileService.getStyle(req.awayTeam)
         ]);
 
         const asOf = (req.kickoff && req.kickoff !== 'UPCOMING') ? req.kickoff : undefined;
         const res = MatchEngine.calculate(
-            DataService.standardize({ ...ProfileService.computeBaseline(req.homeTeam, matches, asOf), name: req.homeTeamName }), 
-            DataService.standardize({ ...ProfileService.computeBaseline(req.awayTeam, matches, asOf), name: req.awayTeamName }), 
-            { 
-                homeStyle: { ...(hS || {}), ...(p.styleMetrics?.home || {}), teamId: req.homeTeam }, awayStyle: { ...(aS || {}), ...(p.styleMetrics?.away || {}), teamId: req.awayTeam }, league: req.league,
-                homeSeasonXG: p.verifiedFacts?.homeSeasonXG, awaySeasonXG: p.verifiedFacts?.awaySeasonXG, homeSeasonXGA: p.verifiedFacts?.homeSeasonXGAs, awaySeasonXGA: p.verifiedFacts?.awaySeasonXGA,
-                marketOdds: { 
-                    pinnacleOver15: p.verifiedFacts?.pinnacleOver15, 
-                    pinnacleUnder15: p.verifiedFacts?.pinnacleUnder15,
-                    pinnacleUnder35: p.verifiedFacts?.pinnacleUnder35,
-                    pinnacleOver35: p.verifiedFacts?.pinnacleOver35
+            DataService.standardize({ ...ProfileService.computeBaseline(req.homeTeam, matches, asOf), name: req.homeTeamName }),
+            DataService.standardize({ ...ProfileService.computeBaseline(req.awayTeam, matches, asOf), name: req.awayTeamName }),
+            {
+                homeStyle: { ...(hS || {}), ...(p.styleMetrics?.home || {}), teamId: req.homeTeam },
+                awayStyle: { ...(aS || {}), ...(p.styleMetrics?.away || {}), teamId: req.awayTeam },
+                league: req.league,
+                homeSeasonXG: homeXGData?.xG || p.verifiedFacts?.homeSeasonXG,
+                awaySeasonXG: awayXGData?.xG || p.verifiedFacts?.awaySeasonXG,
+                homeSeasonXGA: homeXGData?.xGA || p.verifiedFacts?.homeSeasonXGAs,
+                awaySeasonXGA: awayXGData?.xGA || p.verifiedFacts?.awaySeasonXGA,
+                marketOdds: {
+                    pinnacleOver15: bestOdds?.pinnacleOver15 || p.verifiedFacts?.pinnacleOver15,
+                    pinnacleUnder15: bestOdds?.pinnacleUnder15 || p.verifiedFacts?.pinnacleUnder15,
+                    pinnacleUnder35: bestOdds?.pinnacleUnder35 || p.verifiedFacts?.pinnacleUnder35,
+                    pinnacleOver35: bestOdds?.pinnacleOver35 || p.verifiedFacts?.pinnacleOver35
                 },
                 groundingLog: { citations: p.verifiedFacts?.citations || [], varianceAlerts: p.verifiedFacts?.varianceAlerts || [] },
                 intel: intel || undefined

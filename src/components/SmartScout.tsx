@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, ShieldAlert, Newspaper, Users, CloudRain, TrendingUp, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { MatchIntel } from '../services/scapegraphService';
+import { MatchIntel } from '../types';
 
 interface SmartScoutProps {
     homeTeam: string;
@@ -88,7 +88,7 @@ export const SmartScout: React.FC<SmartScoutProps> = ({ homeTeam, awayTeam, leag
                                             <span className="text-[10px] font-bold uppercase tracking-widest">Injuries & Suspensions</span>
                                         </div>
                                         <div className="space-y-2">
-                                            {intel.injuries.length > 0 ? intel.injuries.map((item, i) => (
+                                            {intel.injuries.length > 0 ? intel.injuries.map((item: any, i: number) => (
                                                 <div key={i} className="p-3 bg-neutral-950 rounded-xl border border-neutral-800/50 flex justify-between items-center">
                                                     <div>
                                                         <p className="text-xs font-bold text-white">{item.player}</p>
@@ -110,7 +110,7 @@ export const SmartScout: React.FC<SmartScoutProps> = ({ homeTeam, awayTeam, leag
                                             <span className="text-[10px] font-bold uppercase tracking-widest">Tactical Briefing</span>
                                         </div>
                                         <div className="space-y-2">
-                                            {intel.tacticalNews.map((news, i) => (
+                                            {intel.tacticalNews.map((news: string, i: number) => (
                                                 <div key={i} className="p-3 bg-neutral-950 rounded-xl border border-neutral-800/50">
                                                     <p className="text-xs text-neutral-400 leading-relaxed italic">"{news}"</p>
                                                 </div>
@@ -124,12 +124,12 @@ export const SmartScout: React.FC<SmartScoutProps> = ({ homeTeam, awayTeam, leag
                                             <Users className="w-4 h-4" />
                                             <span className="text-[10px] font-bold uppercase tracking-widest">Lineup Intel</span>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            {intel.lineupRumors.map((team, i) => (
+                                        <div className="space-y-2">
+                                            {intel.lineupRumors.map((team: any, i: number) => (
                                                 <div key={i} className="p-3 bg-neutral-950 rounded-xl border border-neutral-800/50">
                                                     <p className="text-[10px] font-bold text-white mb-2 uppercase">{team.team}</p>
                                                     <div className="flex flex-wrap gap-1">
-                                                        {team.predictedLineup.slice(0, 5).map((player, j) => (
+                                                        {team.predictedLineup.slice(0, 5).map((player: string, j: number) => (
                                                             <span key={j} className="text-[9px] px-1.5 py-0.5 bg-neutral-800 text-neutral-400 rounded">
                                                                 {player}
                                                             </span>

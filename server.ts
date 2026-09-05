@@ -31,6 +31,62 @@ async function startServer() {
   app.post("/api/ingest", auth, async (req, res) => { try { const { league } = req.body; const { matches } = await DataService.getLeagueContext(league || 'EPL'); res.json({ success: true, count: matches.length }); } catch (e) { res.status(500).json({ error: "Sync Failed" }); } });
   app.post("/api/analyze", limiter, auth, async (req, res) => { try { res.json(await performAnalysis(req.body)); } catch (e: any) { res.status(500).json({ error: e.message }); } });
   app.post("/api/intel", limiter, auth, async (req, res) => { try { res.json(await ScapegraphService.getMatchIntel(req.body)); } catch (e: any) { res.status(500).json({ error: e.message }); } });
+  
+  app.post("/api/scrape/history", auth, async (req, res) => {
+      try {
+          const { league, season } = req.body;
+          const matches = await ScapegraphService.scrapeHistoricalMatches(league || 'EPL', season);
+          res.json({ success: true, count: matches.length, matches });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/xg", auth, async (req, res) => {
+      try {
+          const { team, league } = req.body;
+          const xg = await ScapegraphService.getTeamXG(team, league || 'EPL');
+          res.json({ success: true, data: xg });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/standings", auth, async (req, res) => {
+      try {
+          const { league } = req.body;
+          const standings = await ScapegraphService.getLeagueStandings(league || 'EPL');
+          res.json({ success: true, count: standings.length, standings });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/odds", auth, async (req, res) => {
+      try {
+          const { homeTeam, awayTeam, league } = req.body;
+          const odds = await ScapegraphService.getMarketOdds(homeTeam, awayTeam, league || 'EPL');
+          res.json({ success: true, count: odds.length, odds });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/fixtures", auth, async (req, res) => {
+      try {
+          const { league } = req.body;
+          const fixtures = await ScapegraphService.getUpcomingFixtures(league || 'EPL');
+          res.json({ success: true, count: fixtures.length, fixtures });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/form", auth, async (req, res) => {
+      try {
+          const { team, league } = req.body;
+          const form = await ScapegraphService.getTeamForm(team, league || 'EPL');
+          res.json({ success: true, count: form.length, form });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/scrape/context", auth, async (req, res) => {
+      try {
+          const { homeTeam, awayTeam, homeSlug, awaySlug, league } = req.body;
+          const context = await ScapegraphService.getFullMatchContext(homeTeam, awayTeam, homeSlug, awaySlug, league || 'EPL');
+          res.json({ success: true, ...context });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
   app.get("/api/backtest", auth, async (req, res) => { try { const { league } = req.query; res.json(await BacktestService.runBacktest((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Audit Failed" }); } });
   app.get("/api/calibrate", auth, async (req, res) => { try { const { league } = req.query; res.json(await CalibrationService.validate((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Validation Failed" }); } });
   if (process.env.NODE_ENV !== "production") {
