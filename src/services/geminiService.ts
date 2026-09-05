@@ -6,6 +6,7 @@ import { FootballDataProvider } from "./data/footballDataProvider";
 import { CacheService } from "./cacheService";
 import { ScapegraphService } from "./scapegraphService";
 import { DataQuality } from "./dataQuality";
+import { Logger } from "./logger";
 import { AnalysisResult, MatchHistory, LeagueContext, RhoData } from "../types";
 
 const MODEL = 'gemini-3.7-flash', SYSTEM_PROMPT = `Expert Quantitative Football Intelligence Analyst. MISSION: Rigorous Tactical Grounding for Europe's Top 5 Leagues & UCL. 
@@ -79,7 +80,7 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
     const awayForm = fullContext?.awayForm || [];
 
     // Run Quality Validation
-    const quality = DataQuality.validate(intel, homeXGData, awayXGData, scrapedOdds, homeForm, awayForm);
+    const quality = DataQuality.validate(intel, homeXGData, awayXGData, scrapedOdds, homeForm, awayForm, req.kickoff);
     
     if (!quality.shouldProceed) {
         const fallback = await getFallback(req, matches, rho);
@@ -158,6 +159,8 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
         res.summary = p.matchSummary || res.summary;
         res.dataQuality = quality;
         
+        Logger.prediction(`${req.homeTeamName} vs ${req.awayTeamName}`, quality.overall, res.probability * 100);
+
         // Save to Persistent Cache
         await CacheService.set(key, res);
         return res;

@@ -2,6 +2,9 @@ import express from "express"; import path from "path"; import { createServer as
 import { performAnalysis } from "./src/services/geminiService";
 import { ScapegraphService } from "./src/services/scapegraphService";
 import { DataQuality } from "./src/services/dataQuality";
+import { ProxyService } from "./src/services/proxy";
+import { Logger } from "./src/services/logger";
+import { Monitor } from "./src/services/monitor";
 import rateLimit from "express-rate-limit";
 
 async function startServer() {
@@ -91,11 +94,24 @@ async function startServer() {
 
   app.post("/api/scrape/quality", auth, async (req, res) => {
       try {
-          const { homeTeam, awayTeam, homeSlug, awaySlug, league } = req.body;
+          const { homeTeam, awayTeam, homeSlug, awaySlug, league, kickoff } = req.body;
           const ctx = await ScapegraphService.getFullMatchContext(homeTeam, awayTeam, homeSlug, awaySlug, league || 'EPL');
-          const report = DataQuality.validate(ctx.intel, ctx.homeXG, ctx.awayXG, ctx.odds, ctx.homeForm, ctx.awayForm);
+          const report = DataQuality.validate(ctx.intel, ctx.homeXG, ctx.awayXG, ctx.odds, ctx.homeForm, ctx.awayForm, kickoff);
           res.json({ success: true, report });
       } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/proxy/stats", auth, (_req, res) => {
+      res.json(ProxyService.getStats());
+  });
+
+  app.get("/api/logs", auth, (req, res) => {
+      const lines = parseInt(req.query.lines as string) || 50;
+      res.json({ success: true, logs: Logger.getRecentLogs(lines) });
+  });
+
+  app.get("/api/monitor/stats", auth, (_req, res) => {
+      res.json({ success: true, stats: Monitor.getStats() });
   });
   app.get("/api/backtest", auth, async (req, res) => { try { const { league } = req.query; res.json(await BacktestService.runBacktest((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Audit Failed" }); } });
   app.get("/api/calibrate", auth, async (req, res) => { try { const { league } = req.query; res.json(await CalibrationService.validate((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Validation Failed" }); } });

@@ -7,10 +7,25 @@ export class DataQuality {
         awayXG: TeamXGData | null,
         odds: MatchOdds[],
         homeForm: ScrapedHistoricalMatch[],
-        awayForm: ScrapedHistoricalMatch[]
+        awayForm: ScrapedHistoricalMatch[],
+        kickoffTime?: string
     ): DataQualityReport {
         const warnings: string[] = [];
         let score = 100;
+
+        // 0. Recency / Kickoff Check
+        if (kickoffTime && kickoffTime !== 'UPCOMING') {
+            const koDate = new Date(kickoffTime);
+            const now = new Date();
+            const diffMinutes = (koDate.getTime() - now.getTime()) / (1000 * 60);
+            
+            if (diffMinutes < 65 && diffMinutes > -100) {
+                if (!intel?.lineupRumors || intel.lineupRumors.length === 0) {
+                    score -= 15;
+                    warnings.push('Match is within the lineup window (<65 mins to KO) but no confirmed lineups were recovered.');
+                }
+            }
+        }
 
         // 1. Intel Validation
         let intelStatus: 'ok' | 'failed' | 'partial' = 'ok';

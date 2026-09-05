@@ -1,5 +1,7 @@
 
 import { ScrapeGraphAI, ScrapeGraphAIClient } from 'scrapegraph-js';
+import { ProxyService } from './proxy';
+import { Monitor } from './monitor';
 import { 
     IntelRequest, 
     MatchIntel, 
@@ -63,6 +65,9 @@ export class ScapegraphService {
     // 1. MATCH INTEL
     static async getMatchIntel(req: IntelRequest): Promise<MatchIntel> {
         const client = this.getClient();
+        const start = Date.now();
+        const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(`${req.homeTeam} vs ${req.awayTeam} team news injuries ${req.league}`)}`;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract current football intelligence for the match ${req.homeTeam} vs ${req.awayTeam} in ${req.league}.
             Focus on:
@@ -82,12 +87,16 @@ export class ScapegraphService {
         `;
         try {
             const response = await client.extract({
-                url: `https://www.google.com/search?q=${encodeURIComponent(`${req.homeTeam} vs ${req.awayTeam} team news injuries ${req.league}`)}`,
+                url: proxiedUrl,
                 prompt: prompt
             });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             return (response.data?.json || {}) as unknown as MatchIntel;
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error('[SCAPEGRAPH] Intel Extraction Failed:', error);
             return {
                 injuries: [],
@@ -102,8 +111,11 @@ export class ScapegraphService {
     // 2. HISTORICAL MATCH DATA
     static async scrapeHistoricalMatches(league: string, season?: string): Promise<HistoricalMatch[]> {
         const client = this.getClient();
+        const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
         const seasonLabel = season || '2024-2025';
+        const targetUrl = `${config.fbref}/schedule/${seasonLabel.replace('-', '-')}-scores-and-Fixtures`;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract ALL match results from this page.
             For each match return:
@@ -120,10 +132,12 @@ export class ScapegraphService {
         `;
         try {
             const response = await client.extract({
-                url: `${config.fbref}/schedule/${seasonLabel.replace('-', '-')}-scores-and-Fixtures`,
+                url: proxiedUrl,
                 prompt: prompt
             });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             const raw = (response.data?.json || []) as any[];
             return raw.map(m => ({
                 date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
@@ -132,6 +146,8 @@ export class ScapegraphService {
                 league: config.name, season: seasonLabel
             }));
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error('[SCAPEGRAPH] Historical Match Scraping Failed:', error);
             return [];
         }
@@ -140,6 +156,9 @@ export class ScapegraphService {
     // 3. TEAM xG STATS
     static async getTeamXG(teamSlug: string, _league: string): Promise<TeamXGData | null> {
         const client = this.getClient();
+        const start = Date.now();
+        const targetUrl = `https://understat.com/team/${teamSlug}`;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract the team's expected goals (xG) statistics for the current season.
             Return: team name, season, xG, xGA, npxG, total matches played.
@@ -147,10 +166,12 @@ export class ScapegraphService {
         `;
         try {
             const response = await client.extract({
-                url: `https://understat.com/team/${teamSlug}`,
+                url: proxiedUrl,
                 prompt: prompt
             });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             const data = response.data?.json as any;
             return {
                 team: data?.team || teamSlug, season: data?.season || '2024-2025',
@@ -159,6 +180,8 @@ export class ScapegraphService {
                 source: 'understat'
             };
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error(`[SCAPEGRAPH] xG Extraction Failed for ${teamSlug}:`, error);
             return null;
         }
@@ -167,7 +190,10 @@ export class ScapegraphService {
     // 4. LEAGUE STANDINGS WITH xG
     static async getLeagueStandings(league: string): Promise<LeagueStanding[]> {
         const client = this.getClient();
+        const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
+        const targetUrl = config.fbref;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract the full league standings table from this page.
             For each team return: team name, matches played, wins, draws, losses, goals for, goals against, points, xG, xGA.
@@ -175,8 +201,10 @@ export class ScapegraphService {
             [{"team": "Arsenal", "played": 30, "wins": 22, "draws": 5, "losses": 3, "goalsFor": 70, "goalsAgainst": 25, "points": 71, "xG": 68.5, "xGA": 27.2}]
         `;
         try {
-            const response = await client.extract({ url: config.fbref, prompt: prompt });
+            const response = await client.extract({ url: proxiedUrl, prompt: prompt });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             return ((response.data?.json || []) as any[]).map(t => ({
                 team: t.team, played: parseInt(t.played) || 0, wins: parseInt(t.wins) || 0,
                 draws: parseInt(t.draws) || 0, losses: parseInt(t.losses) || 0,
@@ -184,6 +212,8 @@ export class ScapegraphService {
                 points: parseInt(t.points) || 0, xG: parseFloat(t.xG) || 0, xGA: parseFloat(t.xGA) || 0
             }));
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error('[SCAPEGRAPH] Standings Extraction Failed:', error);
             return [];
         }
@@ -192,6 +222,9 @@ export class ScapegraphService {
     // 5. MARKET ODDS
     static async getMarketOdds(homeTeam: string, awayTeam: string, league: string): Promise<MatchOdds[]> {
         const client = this.getClient();
+        const start = Date.now();
+        const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(`${homeTeam} vs ${awayTeam} over under goals odds ${league}`)}`;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract all bookmaker odds for the match ${homeTeam} vs ${awayTeam}.
             Focus specifically on: Over 1.5 Goals, Under 1.5 Goals, Over 3.5 Goals, Under 3.5 Goals.
@@ -200,16 +233,20 @@ export class ScapegraphService {
         `;
         try {
             const response = await client.extract({
-                url: `https://www.google.com/search?q=${encodeURIComponent(`${homeTeam} vs ${awayTeam} over under goals odds ${league}`)}`,
+                url: proxiedUrl,
                 prompt: prompt
             });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             return ((response.data?.json || []) as any[]).map(o => ({
                 bookmaker: o.bookmaker || 'Unknown',
                 over15: parseFloat(o.over15) || 0, under15: parseFloat(o.under15) || 0,
                 over35: parseFloat(o.over35) || 0, under35: parseFloat(o.under35) || 0
             }));
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error('[SCAPEGRAPH] Odds Extraction Failed:', error);
             return [];
         }
@@ -218,7 +255,10 @@ export class ScapegraphService {
     // 6. UPCOMING FIXTURES
     static async getUpcomingFixtures(league: string): Promise<Fixture[]> {
         const client = this.getClient();
+        const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
+        const targetUrl = `${config.fbref}/schedule/Scores-and-Fixtures`;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract all upcoming/scheduled matches from this fixtures page.
             For each match return: date (YYYY-MM-DD), time (HH:MM), home team, away team.
@@ -226,15 +266,19 @@ export class ScapegraphService {
         `;
         try {
             const response = await client.extract({
-                url: `${config.fbref}/schedule/Scores-and-Fixtures`,
+                url: proxiedUrl,
                 prompt: prompt
             });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             return ((response.data?.json || []) as any[]).map(f => ({
                 date: f.date, time: f.time || 'TBD',
                 homeTeam: f.homeTeam, awayTeam: f.awayTeam, league: config.name
             }));
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error('[SCAPEGRAPH] Fixtures Extraction Failed:', error);
             return [];
         }
@@ -243,7 +287,10 @@ export class ScapegraphService {
     // 7. TEAM FORM (last 5 matches)
     static async getTeamForm(teamSlug: string, league: string): Promise<HistoricalMatch[]> {
         const client = this.getClient();
+        const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
+        const targetUrl = `https://fbref.com/en/squads/${teamSlug}`;
+        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
             Extract the last 5 match results for this team.
             For each match return: date, home team, away team, home goals, away goals, home xG (if available), away xG (if available).
@@ -251,10 +298,12 @@ export class ScapegraphService {
         `;
         try {
             const response = await client.extract({
-                url: `https://fbref.com/en/squads/${teamSlug}`,
+                url: proxiedUrl,
                 prompt: prompt
             });
+            const duration = Date.now() - start;
             if (response.status === 'error') throw new Error(response.error);
+            Monitor.recordScrape(targetUrl, 'success', duration);
             return ((response.data?.json || []) as any[]).map(m => ({
                 date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
                 homeGoals: parseInt(m.homeGoals) || 0, awayGoals: parseInt(m.awayGoals) || 0,
@@ -262,6 +311,8 @@ export class ScapegraphService {
                 league: config.name, season: '2024-2025'
             }));
         } catch (error) {
+            const duration = Date.now() - start;
+            Monitor.recordScrape(targetUrl, 'failed', duration);
             console.error(`[SCAPEGRAPH] Form Extraction Failed for ${teamSlug}:`, error);
             return [];
         }
