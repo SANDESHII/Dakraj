@@ -10,6 +10,7 @@ import { ResultGrid } from './components/ResultDisplay';
 import { GroundingLog } from './components/GroundingLog';
 import { SmartScout } from './components/SmartScout';
 import { BacktestDisplay } from './components/BacktestDisplay';
+import { SystemAudit } from './components/SystemAudit';
 import { fetchWithTimeout } from './utils';
 import { LOADING_MESSAGES } from './core/constants';
 
@@ -151,6 +152,8 @@ export const App: React.FC = () => {
                         <BacktestDisplay />
                     </div>
                 </section>
+
+                <SystemAudit />
             </main>
 
             <footer className="max-w-6xl mx-auto px-6 py-20 border-t border-neutral-900 text-xs text-neutral-600 font-medium tracking-tight">

@@ -36,15 +36,18 @@ export const SmartScout: React.FC<SmartScoutProps> = ({ homeTeam, awayTeam, leag
     };
 
     return (
-        <div className="bg-neutral-900/50 border border-neutral-800 rounded-2xl overflow-hidden backdrop-blur-sm">
-            <div className="p-6 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                        <Search className="w-5 h-5 text-emerald-500" />
+        <div className="bg-neutral-900/50 border border-neutral-900 rounded-[32px] overflow-hidden backdrop-blur-md">
+            <div className="p-10 flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group">
+                        <Search className="w-5 h-5 text-emerald-500 transition-transform group-hover:scale-110" />
                     </div>
                     <div>
-                        <h3 className="text-white font-bold tracking-tight">Smart Scout <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full ml-2 uppercase">Scapegraph AI</span></h3>
-                        <p className="text-xs text-neutral-500">Real-time web intelligence and injury reports</p>
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-xl font-black text-white tracking-tighter uppercase">Smart Scout</h3>
+                            <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full uppercase tracking-widest">Scapegraph Pro</span>
+                        </div>
+                        <p className="text-[10px] text-neutral-500 font-bold uppercase tracking-widest mt-1">Real-time tactical grounding & forensic signal scouring</p>
                     </div>
                 </div>
                 {!intel && !loading && (

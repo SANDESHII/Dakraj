@@ -16,7 +16,8 @@ export class ProfileService {
         if (!name) return { id: "UNKNOWN", isMapped: false };
         const n = name.trim().toLowerCase();
         for (const [id, al] of Object.entries(this.MAP)) if (id.toLowerCase() === n || al.some(a => a.toLowerCase() === n)) return { id, isMapped: true };
-        return { id: name.toUpperCase().replace(/\s+/g, '_'), isMapped: false };
+        const sanitized = name.trim().toUpperCase().replace(/\s+/g, '_');
+        return { id: sanitized, isMapped: false };
     }
     static getDisplayName(id: string) { return this.MAP[id]?.[0] || id; }
     static computeBaseline(name: string, matches: MatchHistory[], asOfDate?: string) {

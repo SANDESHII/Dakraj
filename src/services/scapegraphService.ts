@@ -1,6 +1,5 @@
 
 import { ScrapeGraphAI, ScrapeGraphAIClient } from 'scrapegraph-js';
-import { ProxyService } from './proxy';
 import { Monitor } from './monitor';
 import { 
     IntelRequest, 
@@ -41,6 +40,11 @@ const LEAGUE_URLS: Record<string, { fbref: string; understat: string; name: stri
         fbref: 'https://fbref.com/en/comps/13/Ligue-1-Stats',
         understat: 'https://understat.com/league/Ligue_1',
         name: 'Ligue 1'
+    },
+    UCL: {
+        fbref: 'https://fbref.com/en/comps/8/Champions-League-Stats',
+        understat: 'https://understat.com/league/Champions_League',
+        name: 'Champions League'
     }
 };
 
@@ -62,21 +66,54 @@ export class ScapegraphService {
         return this.client;
     }
 
+    /**
+     * Resilient extraction that bypasses double-proxying and provides search fallbacks.
+     */
+    private static async resilientExtract(url: string, prompt: string, searchFallbackQuery?: string): Promise<any> {
+        const client = this.getClient();
+        
+        // Strategy 1: Direct Scrape (let ScrapeGraphAI handle its own proxies)
+        try {
+            const response = await client.extract({ url, prompt });
+            if (response.status === 'success') return response.data?.json;
+            if (response.status === 'error' && !response.error?.includes('502')) {
+                 throw new Error(response.error);
+            }
+        } catch (e) {
+            console.warn(`[SCAPEGRAPH] Direct extraction failed for ${url}, attempting search fallback...`);
+        }
+
+        // Strategy 2: Search Fallback if direct URL failed or was unreliable
+        if (searchFallbackQuery) {
+            try {
+                const searchResponse = await client.extract({
+                    url: `https://www.google.com/search?q=${encodeURIComponent(searchFallbackQuery)}`,
+                    prompt: `Find the official statistics page for the requested query and extract the data requested: ${prompt}`
+                });
+                if (searchResponse.status === 'success') return searchResponse.data?.json;
+            } catch (e) {
+                console.error('[SCAPEGRAPH] Search fallback also failed:', e);
+            }
+        }
+
+        throw new Error(`Failed to extract data from ${url}`);
+    }
+
     // 1. MATCH INTEL
     static async getMatchIntel(req: IntelRequest): Promise<MatchIntel> {
-        const client = this.getClient();
         const start = Date.now();
-        const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(`${req.homeTeam} vs ${req.awayTeam} team news injuries ${req.league}`)}`;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
+        const query = `${req.homeTeam} vs ${req.awayTeam} team news injuries lineups ${req.league}`;
+        const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
         const prompt = `
-            Extract current football intelligence for the match ${req.homeTeam} vs ${req.awayTeam} in ${req.league}.
-            Focus on:
-            1. Injuries and Suspensions for both teams (include player name and status).
-            2. Tactical news or manager quotes from the last 48 hours.
-            3. Predicted lineups or major lineup rumors.
-            4. Local weather impact on match day.
-            5. Betting market sentiment or significant steam moves.
-            Return the data in a structured JSON format matching this schema:
+            Act as a Senior Forensic Football Analyst. Extract current intelligence for the match ${req.homeTeam} vs ${req.awayTeam} in ${req.league}.
+            
+            MANDATORY DATA POINTS:
+            1. INJURIES & SUSPENSIONS: Extract specific player names, their role, their injury status (e.g., 'Doubtful', 'Out'), and the tactical impact of their absence.
+            2. TACTICAL INTELLIGENCE: Search for manager press conferences from the last 24-48 hours. Extract specific tactical shifts mentioned (e.g., "high press", "low block", "rest rotation").
+            3. LINEUP FORENSICS: Find predicted XIs from reliable sources.
+            4. EXTERNAL VARIABLES: Extract local weather forecasts for the match time and any mentioned "betting steam" or sharp moves in the market.
+
+            Return JSON structure:
             {
                 "injuries": [{"team": "string", "player": "string", "status": "string", "impact": "string"}],
                 "tacticalNews": ["string"],
@@ -86,17 +123,13 @@ export class ScapegraphService {
             }
         `;
         try {
-            const response = await client.extract({
-                url: proxiedUrl,
-                prompt: prompt
-            });
+            const data = await this.resilientExtract(targetUrl, prompt);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            return (response.data?.json || {}) as unknown as MatchIntel;
+            Monitor.recordScrape('Google Search (Intel)', 'success', duration);
+            return (data || {}) as unknown as MatchIntel;
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('Google Search (Intel)', 'failed', duration);
             console.error('[SCAPEGRAPH] Intel Extraction Failed:', error);
             return {
                 injuries: [],
@@ -110,35 +143,29 @@ export class ScapegraphService {
 
     // 2. HISTORICAL MATCH DATA
     static async scrapeHistoricalMatches(league: string, season?: string): Promise<HistoricalMatch[]> {
-        const client = this.getClient();
         const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
         const seasonLabel = season || '2024-2025';
         const targetUrl = `${config.fbref}/schedule/${seasonLabel.replace('-', '-')}-scores-and-Fixtures`;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
-            Extract ALL match results from this page.
-            For each match return:
-            - date (YYYY-MM-DD format)
-            - home team name
-            - away team name
-            - home goals (integer)
-            - away goals (integer)
-            - home xG (float, if available)
-            - away xG (float, if available)
-            Return as a JSON array:
-            [{"date": "2024-08-17", "homeTeam": "Arsenal", "awayTeam": "Wolves", "homeGoals": 2, "awayGoals": 0, "homeXG": 2.1, "awayXG": 0.4}]
-            Include ALL matches on the page. Do not skip any.
+            Extract ALL match results from the historical schedule page.
+            DATA REQUIREMENTS:
+            - date (YYYY-MM-DD)
+            - homeTeam (canonical name)
+            - awayTeam (canonical name)
+            - homeGoals (int)
+            - awayGoals (int)
+            - homeXG (float, extract precisely if present)
+            - awayXG (float, extract precisely if present)
+
+            Return as JSON array:
+            [{"date": "YYYY-MM-DD", "homeTeam": "string", "awayTeam": "string", "homeGoals": 0, "awayGoals": 0, "homeXG": 0.0, "awayXG": 0.0}]
         `;
         try {
-            const response = await client.extract({
-                url: proxiedUrl,
-                prompt: prompt
-            });
+            const data = await this.resilientExtract(targetUrl, prompt);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            const raw = (response.data?.json || []) as any[];
+            Monitor.recordScrape('FBRef (Historical)', 'success', duration);
+            const raw = (data || []) as any[];
             return raw.map(m => ({
                 date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
                 homeGoals: parseInt(m.homeGoals) || 0, awayGoals: parseInt(m.awayGoals) || 0,
@@ -147,32 +174,34 @@ export class ScapegraphService {
             }));
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('FBRef (Historical)', 'failed', duration);
             console.error('[SCAPEGRAPH] Historical Match Scraping Failed:', error);
             return [];
         }
     }
 
     // 3. TEAM xG STATS
-    static async getTeamXG(teamSlug: string, _league: string): Promise<TeamXGData | null> {
-        const client = this.getClient();
+    static async getTeamXG(teamSlug: string, league: string): Promise<TeamXGData | null> {
         const start = Date.now();
-        const targetUrl = `https://understat.com/team/${teamSlug}`;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
+        // Understat usually uses Underscores for team pages
+        const normalizedSlug = teamSlug.replace(/[-]/g, '_');
+        const targetUrl = `https://understat.com/team/${normalizedSlug}`;
         const prompt = `
-            Extract the team's expected goals (xG) statistics for the current season.
-            Return: team name, season, xG, xGA, npxG, total matches played.
-            Return as JSON: {"team": "string", "season": "2024-2025", "xG": 45.2, "xGA": 32.1, "npxG": 42.8, "matches": 30}
+            Extract the team's professional expected goals (xG) statistics for the current season.
+            REQUIRED FIELDS:
+            - team: official name
+            - season: current season string
+            - xG: Total Expected Goals
+            - xGA: Total Expected Goals Against
+            - npxG: Non-penalty Expected Goals (CRITICAL)
+            - matches: total matches played
+
+            Return as JSON: {"team": "string", "season": "2024-2025", "xG": 0.0, "xGA": 0.0, "npxG": 0.0, "matches": 0}
         `;
         try {
-            const response = await client.extract({
-                url: proxiedUrl,
-                prompt: prompt
-            });
+            const data = await this.resilientExtract(targetUrl, prompt, `${teamSlug} understat stats current season ${league}`);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            const data = response.data?.json as any;
+            Monitor.recordScrape('Understat (xG)', 'success', duration);
             return {
                 team: data?.team || teamSlug, season: data?.season || '2024-2025',
                 xG: parseFloat(data?.xG) || 0, xGA: parseFloat(data?.xGA) || 0,
@@ -181,7 +210,7 @@ export class ScapegraphService {
             };
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('Understat (xG)', 'failed', duration);
             console.error(`[SCAPEGRAPH] xG Extraction Failed for ${teamSlug}:`, error);
             return null;
         }
@@ -189,23 +218,20 @@ export class ScapegraphService {
 
     // 4. LEAGUE STANDINGS WITH xG
     static async getLeagueStandings(league: string): Promise<LeagueStanding[]> {
-        const client = this.getClient();
         const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
         const targetUrl = config.fbref;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
-            Extract the full league standings table from this page.
-            For each team return: team name, matches played, wins, draws, losses, goals for, goals against, points, xG, xGA.
-            Return as a JSON array sorted by points descending:
-            [{"team": "Arsenal", "played": 30, "wins": 22, "draws": 5, "losses": 3, "goalsFor": 70, "goalsAgainst": 25, "points": 71, "xG": 68.5, "xGA": 27.2}]
+            Extract full league standings including advanced xG metrics.
+            REQUIRED PER TEAM: team, played, wins, draws, losses, goalsFor, goalsAgainst, points, xG, xGA.
+            
+            Return JSON array: [{"team": "string", "played": 0, "wins": 0, "draws": 0, "losses": 0, "goalsFor": 0, "goalsAgainst": 0, "points": 0, "xG": 0.0, "xGA": 0.0}]
         `;
         try {
-            const response = await client.extract({ url: proxiedUrl, prompt: prompt });
+            const data = await this.resilientExtract(targetUrl, prompt);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            return ((response.data?.json || []) as any[]).map(t => ({
+            Monitor.recordScrape('FBRef (Standings)', 'success', duration);
+            return ((data || []) as any[]).map(t => ({
                 team: t.team, played: parseInt(t.played) || 0, wins: parseInt(t.wins) || 0,
                 draws: parseInt(t.draws) || 0, losses: parseInt(t.losses) || 0,
                 goalsFor: parseInt(t.goalsFor) || 0, goalsAgainst: parseInt(t.goalsAgainst) || 0,
@@ -213,7 +239,7 @@ export class ScapegraphService {
             }));
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('FBRef (Standings)', 'failed', duration);
             console.error('[SCAPEGRAPH] Standings Extraction Failed:', error);
             return [];
         }
@@ -221,32 +247,30 @@ export class ScapegraphService {
 
     // 5. MARKET ODDS
     static async getMarketOdds(homeTeam: string, awayTeam: string, league: string): Promise<MatchOdds[]> {
-        const client = this.getClient();
         const start = Date.now();
-        const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(`${homeTeam} vs ${awayTeam} over under goals odds ${league}`)}`;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
+        const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(`${homeTeam} vs ${awayTeam} betting odds goals ${league} pinnacle`)}`;
         const prompt = `
-            Extract all bookmaker odds for the match ${homeTeam} vs ${awayTeam}.
-            Focus specifically on: Over 1.5 Goals, Under 1.5 Goals, Over 3.5 Goals, Under 3.5 Goals.
-            For each bookmaker return: {"bookmaker": "Pinnacle", "over15": 1.35, "under15": 3.20, "over35": 2.80, "under35": 1.45}
-            Return as a JSON array. Include ALL bookmakers found.
+            Extract closing market betting odds for Over/Under goals.
+            TARGET MARKETS:
+            1. Over 1.5 / Under 1.5
+            2. Over 3.5 / Under 3.5
+            
+            Prioritize Pinnacle, SBOBET, and Market Average if multiple found.
+            
+            Return JSON array: [{"bookmaker": "string", "over15": 0.0, "under15": 0.0, "over35": 0.0, "under35": 0.0}]
         `;
         try {
-            const response = await client.extract({
-                url: proxiedUrl,
-                prompt: prompt
-            });
+            const data = await this.resilientExtract(targetUrl, prompt);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            return ((response.data?.json || []) as any[]).map(o => ({
+            Monitor.recordScrape('Google Search (Odds)', 'success', duration);
+            return ((data || []) as any[]).map(o => ({
                 bookmaker: o.bookmaker || 'Unknown',
                 over15: parseFloat(o.over15) || 0, under15: parseFloat(o.under15) || 0,
                 over35: parseFloat(o.over35) || 0, under35: parseFloat(o.under35) || 0
             }));
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('Google Search (Odds)', 'failed', duration);
             console.error('[SCAPEGRAPH] Odds Extraction Failed:', error);
             return [];
         }
@@ -254,31 +278,24 @@ export class ScapegraphService {
 
     // 6. UPCOMING FIXTURES
     static async getUpcomingFixtures(league: string): Promise<Fixture[]> {
-        const client = this.getClient();
         const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
         const targetUrl = `${config.fbref}/schedule/Scores-and-Fixtures`;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
         const prompt = `
-            Extract all upcoming/scheduled matches from this fixtures page.
-            For each match return: date (YYYY-MM-DD), time (HH:MM), home team, away team.
-            Return as JSON array: [{"date": "2025-03-15", "time": "15:00", "homeTeam": "Arsenal", "awayTeam": "Chelsea"}]
+            Extract upcoming fixtures.
+            Return JSON array: [{"date": "YYYY-MM-DD", "time": "HH:MM", "homeTeam": "string", "awayTeam": "string"}]
         `;
         try {
-            const response = await client.extract({
-                url: proxiedUrl,
-                prompt: prompt
-            });
+            const data = await this.resilientExtract(targetUrl, prompt);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            return ((response.data?.json || []) as any[]).map(f => ({
+            Monitor.recordScrape('FBRef (Fixtures)', 'success', duration);
+            return ((data || []) as any[]).map(f => ({
                 date: f.date, time: f.time || 'TBD',
                 homeTeam: f.homeTeam, awayTeam: f.awayTeam, league: config.name
             }));
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('FBRef (Fixtures)', 'failed', duration);
             console.error('[SCAPEGRAPH] Fixtures Extraction Failed:', error);
             return [];
         }
@@ -286,25 +303,20 @@ export class ScapegraphService {
 
     // 7. TEAM FORM (last 5 matches)
     static async getTeamForm(teamSlug: string, league: string): Promise<HistoricalMatch[]> {
-        const client = this.getClient();
         const start = Date.now();
         const config = LEAGUE_URLS[league] || LEAGUE_URLS.EPL;
-        const targetUrl = `https://fbref.com/en/squads/${teamSlug}`;
-        const proxiedUrl = ProxyService.getProxiedUrl(targetUrl);
+        // FBRef team pages often use Dashes
+        const normalizedSlug = teamSlug.replace(/[_]/g, '-');
+        const targetUrl = `https://fbref.com/en/squads/${normalizedSlug}`;
         const prompt = `
-            Extract the last 5 match results for this team.
-            For each match return: date, home team, away team, home goals, away goals, home xG (if available), away xG (if available).
-            Return as JSON array: [{"date": "2025-03-01", "homeTeam": "Arsenal", "awayTeam": "Chelsea", "homeGoals": 2, "awayGoals": 1, "homeXG": 1.8, "awayXG": 0.9}]
+            Extract last 5 match results for this team.
+            Return JSON array: [{"date": "YYYY-MM-DD", "homeTeam": "string", "awayTeam": "string", "homeGoals": 0, "awayGoals": 0, "homeXG": 0.0, "awayXG": 0.0}]
         `;
         try {
-            const response = await client.extract({
-                url: proxiedUrl,
-                prompt: prompt
-            });
+            const data = await this.resilientExtract(targetUrl, prompt, `${teamSlug} fbref fixtures results current season ${league}`);
             const duration = Date.now() - start;
-            if (response.status === 'error') throw new Error(response.error);
-            Monitor.recordScrape(targetUrl, 'success', duration);
-            return ((response.data?.json || []) as any[]).map(m => ({
+            Monitor.recordScrape('FBRef (Form)', 'success', duration);
+            return ((data || []) as any[]).map(m => ({
                 date: m.date, homeTeam: m.homeTeam, awayTeam: m.awayTeam,
                 homeGoals: parseInt(m.homeGoals) || 0, awayGoals: parseInt(m.awayGoals) || 0,
                 homeXG: parseFloat(m.homeXG) || undefined, awayXG: parseFloat(m.awayXG) || undefined,
@@ -312,7 +324,7 @@ export class ScapegraphService {
             }));
         } catch (error) {
             const duration = Date.now() - start;
-            Monitor.recordScrape(targetUrl, 'failed', duration);
+            Monitor.recordScrape('FBRef (Form)', 'failed', duration);
             console.error(`[SCAPEGRAPH] Form Extraction Failed for ${teamSlug}:`, error);
             return [];
         }
