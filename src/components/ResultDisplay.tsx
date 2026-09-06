@@ -29,7 +29,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                     <div className="flex items-center gap-4">
                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50 animate-pulse" />
                         <span className="text-[10px] font-black tracking-[0.3em] text-neutral-600 uppercase">
-                            {analysis.dataSource === 'LIVE' ? 'Neural Signal Integrity: 100%' : 'Archetype Projection Mode'}
+                            {analysis.dataSource === 'LIVE' ? 'Dixon-Coles Signal Integrity: 100%' : 'Archetype Projection Mode'}
                         </span>
                     </div>
                     <h2 className="text-7xl md:text-8xl font-black text-white tracking-tighter leading-[0.8] uppercase max-w-2xl">
@@ -38,7 +38,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                 </div>
                 <div className="flex flex-col items-end gap-3">
                     <span className="text-9xl font-black text-emerald-500 tracking-tighter leading-none drop-shadow-2xl shadow-emerald-500/10">{analysis.probability}%</span>
-                    <span className="text-[11px] font-black text-neutral-600 uppercase tracking-[0.25em]">Probability Signal</span>
+                    <span className="text-[11px] font-black text-neutral-600 uppercase tracking-[0.25em]">Quantitative Probability</span>
                 </div>
             </div>
 
@@ -127,7 +127,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ analysis }) => {
                         <div className="space-y-6">
                             <div className="space-y-3">
                                 <div className="flex justify-between text-[10px] font-bold uppercase text-neutral-400">
-                                    <span>Signal Purity</span>
+                                    <span>Dixon-Coles Confidence</span>
                                     <span>{analysis.purity}%</span>
                                 </div>
                                 <div className="h-1 bg-neutral-900 rounded-full overflow-hidden">

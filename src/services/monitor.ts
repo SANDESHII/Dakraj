@@ -71,4 +71,9 @@ export class Monitor {
         }
         return result;
     }
+
+    static reset() {
+        this.stats = {};
+        this.lastAlert = 0;
+    }
 }

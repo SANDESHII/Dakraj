@@ -7,10 +7,6 @@ import { Header } from './components/Header';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { AnalysisForm } from './components/AnalysisForm';
 import { ResultGrid } from './components/ResultDisplay';
-import { GroundingLog } from './components/GroundingLog';
-import { SmartScout } from './components/SmartScout';
-import { BacktestDisplay } from './components/BacktestDisplay';
-import { SystemAudit } from './components/SystemAudit';
 import { fetchWithTimeout } from './utils';
 import { LOADING_MESSAGES } from './core/constants';
 
@@ -133,27 +129,8 @@ export const App: React.FC = () => {
                         className="space-y-16"
                     >
                         <ResultGrid analysis={analysis} />
-                        <SmartScout 
-                            homeTeam={inputs.home} 
-                            awayTeam={inputs.away} 
-                            league={inputs.league} 
-                            initialIntel={analysis.context.intel}
-                        />
-                        <GroundingLog context={analysis.context} />
                     </motion.div>
                 )}
-
-                <section className="pt-32 border-t border-neutral-900">
-                    <div className="space-y-12">
-                        <div className="space-y-4">
-                            <h3 className="text-2xl font-bold text-white">Historical Performance</h3>
-                            <p className="text-neutral-500 text-sm">Real-time backtesting across the last 300 league fixtures.</p>
-                        </div>
-                        <BacktestDisplay />
-                    </div>
-                </section>
-
-                <SystemAudit />
             </main>
 
             <footer className="max-w-6xl mx-auto px-6 py-20 border-t border-neutral-900 text-xs text-neutral-600 font-medium tracking-tight">

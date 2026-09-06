@@ -9,18 +9,18 @@ import { DataQuality } from "./dataQuality";
 import { Logger } from "./logger";
 import { AnalysisResult, MatchHistory, LeagueContext, RhoData } from "../types";
 
-const MODEL = 'gemini-3.7-flash', SYSTEM_PROMPT = `Expert Quantitative Football Intelligence Analyst. MISSION: Rigorous Tactical Grounding for Europe's Top 5 Leagues & UCL. 
-1. OUTLIER JAIL: Discard stats outside reality ranges (npxG/xGA 0.4-3.5). 
-2. CHECKSUM: Verify (Season Goals / Matches). 
-3. ADVERSARIAL: Compare FBRef vs Understat. Discard if >10% variance. 
-4. MARKET SYNC: Sync with Pinnacle/Betfair. 
-5. NO NARRATIVE: Atoms only. Output strictly valid JSON.`;
+const MODEL = 'gemini-3.7-flash', SYSTEM_PROMPT = `Expert Forensic Data Researcher. MISSION: High-Integrity Fact Retrieval for Quantitative Models.
+1. DATA RETRIEVAL: Find missing npxG, xGA, and tactical metrics (PPDA).
+2. NEWS AUDIT: Identify confirmed lineup leaks, injury crisis (>3 starters), or extreme weather.
+3. NO ANALYSIS: You are a DATA WORKER. Do not predict probabilities.
+4. CITATION: Every number must have a source.
+5. Output strictly valid JSON.`;
 
 const AI_SCHEMA = {
     type: Type.OBJECT, properties: {
-        groundingConfidence: { type: Type.NUMBER },
+        researchConfidence: { type: Type.NUMBER },
+        tacticalIntel: { type: Type.STRING },
         verifiedFacts: { type: Type.OBJECT, properties: {
-            matchContext: { type: Type.STRING }, verifiedNewsSummary: { type: Type.STRING },
             homeSeasonXG: { type: Type.NUMBER }, awaySeasonXG: { type: Type.NUMBER }, homeSeasonXGAs: { type: Type.NUMBER }, awaySeasonXGA: { type: Type.NUMBER },
             pinnacleOver15: { type: Type.NUMBER }, pinnacleUnder15: { type: Type.NUMBER }, pinnacleUnder35: { type: Type.NUMBER }, pinnacleOver35: { type: Type.NUMBER },
             citations: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { source: { type: Type.STRING }, url: { type: Type.STRING }, value: { type: Type.NUMBER }, timestamp: { type: Type.STRING } } } },
@@ -29,8 +29,8 @@ const AI_SCHEMA = {
         styleMetrics: { type: Type.OBJECT, properties: {
             home: { type: Type.OBJECT, properties: { ppda: { type: Type.NUMBER }, possessionFinalThird: { type: Type.NUMBER } } },
             away: { type: Type.OBJECT, properties: { ppda: { type: Type.NUMBER }, possessionFinalThird: { type: Type.NUMBER } } }
-        }}, matchSummary: { type: Type.STRING }
-    }, required: ["matchSummary", "groundingConfidence"]
+        }}
+    }, required: ["researchConfidence", "tacticalIntel"]
 };
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
@@ -157,7 +157,8 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
                 dataQuality: quality
             }, rho);
 
-        res.summary = p.matchSummary || res.summary;
+        // Append tactical intel to the math-driven summary
+        res.summary = `${res.summary} Forensic intel: ${p.tacticalIntel}`;
         res.dataQuality = quality;
         
         Logger.prediction(`${req.homeTeamName} vs ${req.awayTeamName}`, quality.overall, res.probability * 100);

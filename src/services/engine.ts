@@ -86,10 +86,23 @@ export class MatchEngine {
         const mPO15 = mP_O15_raw / (1 + overroundO15);
         const mPU35 = mP_U35_raw / (1 + overroundU35);
 
-        // Step 5: Bayesian blend with dynamic purity scaling
-        // Scale the base trust by purity. If purity is 50%, trust the model 50% less than base.
-        const purityScale = purity / 100;
-        const w = BAYESIAN_CONFIG.BASE_TRUST * purityScale; 
+        // Step 5: Dynamic Bayesian Trust Model
+        // Instead of a fixed dial, we calculate trust based on Information Quality, Market Efficiency, and League Predictability.
+        
+        // A) League Base Trust: High-scoring, high-data leagues (EPL/Bundesliga) allow higher model confidence.
+        const leagueRate = LEAGUE_CONVERSION_RATES[context.league || 'STANDARD'] || LEAGUE_CONVERSION_RATES.STANDARD;
+        
+        // B) Model Confidence: Derived from Purity (Sample size + Data Integrity)
+        // We scale the league rate by the purity of the specific data we found.
+        const modelTrust = (purity / 100) * (leagueRate * 1.5); // Boost base rate by up to 50% if purity is perfect
+        
+        // C) Market Efficiency: Tighter markets (low overround) are harder to beat.
+        const avgOverround = (overroundO15 + overroundU35) / 2;
+        const marketEfficiencyFactor = 1 - Math.min(0.2, Math.max(0, avgOverround - 0.02) * 2.5);
+
+        // D) Final Bayesian Blend Weight (w)
+        // This is the true 'learning' dial: it moves based on how much signal vs noise we detect in this specific fixture.
+        const w = Math.max(0.1, Math.min(0.65, modelTrust * marketEfficiencyFactor));
         
         const pBlendedO15 = (pO15_raw * w) + (mPO15 * (1 - w));
         const pBlendedU35 = (pU35_raw * w) + (mPU35 * (1 - w));
@@ -107,11 +120,12 @@ export class MatchEngine {
         const edge = Math.min(rawEdge, 0.12); // Safety cap
         const hasEdge = edge > 0.025; // 2.5% minimum edge threshold
 
+        // Generate Quantitative Summary (Math First)
+        const mathSummary = `Dixon-Coles model projects ${hL.toFixed(2)} vs ${aM.toFixed(2)} xG. ${hasEdge ? `Model-to-Market variance of ${Math.round(edge * 100)}% indicates a structural inefficiency.` : 'Market convergence confirmed.'}`;
+
         return {
             probability: Math.round(p * 100),
-            summary: hasEdge
-                ? `Edge detected. Model sees ${Math.round(p * 100)}% true probability. Market implies ${Math.round(mP * 100)}%.`
-                : `No Edge. Market odds (${mOdds.toFixed(2)}) are efficient.`,
+            summary: mathSummary,
             homeStats: home,
             awayStats: away,
             homeXG: hL,

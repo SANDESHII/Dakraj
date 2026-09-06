@@ -37,11 +37,6 @@ export const DATA_CONSTANTS = {
     RHO_SAMPLE_SIZE: 500
 };
 
-// HARDCONSERVATIVE: Fixed Bayesian blend weight (no grid search overfitting)
-export const BAYESIAN_CONFIG = {
-    BASE_TRUST: 0.35 // Model gets 35% weight, market gets 65%
-};
-
 export const ELITE_LEAGUES = ['EPL', 'LA_LIGA', 'BUNDESLIGA', 'SERIE_A', 'LIGUE_1', 'UCL'];
 
 export const LOADING_MESSAGES = [

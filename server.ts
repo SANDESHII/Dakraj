@@ -1,4 +1,4 @@
-import express from "express"; import path from "path"; import { createServer as createViteServer } from "vite"; import { BacktestService } from "./src/services/backtestService"; import { DataService } from "./src/services/dataService"; import { CalibrationService } from "./src/services/calibrationService";
+import express from "express"; import path from "path"; import { createServer as createViteServer } from "vite"; import { DataService } from "./src/services/dataService";
 import { performAnalysis } from "./src/services/geminiService";
 import { ScapegraphService } from "./src/services/scapegraphService";
 import { DataQuality } from "./src/services/dataQuality";
@@ -113,8 +113,22 @@ async function startServer() {
   app.get("/api/monitor/stats", auth, (_req, res) => {
       res.json({ success: true, stats: Monitor.getStats() });
   });
-  app.get("/api/backtest", auth, async (req, res) => { try { const { league } = req.query; res.json(await BacktestService.runBacktest((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Audit Failed" }); } });
-  app.get("/api/calibrate", auth, async (req, res) => { try { const { league } = req.query; res.json(await CalibrationService.validate((league as string) || 'EPL')); } catch (e) { res.status(500).json({ error: "Validation Failed" }); } });
+
+  app.post("/api/system/reset", auth, async (_req, res) => {
+      try {
+          // 1. Clear Logs
+          Logger.clearLogs();
+          // 2. Clear Monitor Stats
+          Monitor.reset();
+          // 3. Clear Cache and Profiles (Firestore)
+          await DataService.clearAllData();
+          
+          res.json({ success: true, message: "System purged. Forensic slate is clean." });
+      } catch (e: any) {
+          res.status(500).json({ error: e.message });
+      }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: "spa" }); app.use(vite.middlewares);
     app.get("*all", async (req, res, next) => { if (req.url.startsWith("/api")) return next(); try { const fs = await import("fs"), html = fs.readFileSync(path.join(process.cwd(), "index.html"), "utf-8"), content = await vite.transformIndexHtml(req.url, html); res.status(200).set({ "Content-Type": "text/html" }).end(content); } catch (e) { vite.ssrFixStacktrace(e as Error); next(e); } });

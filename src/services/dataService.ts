@@ -127,4 +127,19 @@ export class DataService {
             cleanSheets: team.cleanSheets || 0, dataPurity: team.dataPurity || team.purity || 1.0
         };
     }
+
+    static async clearAllData() {
+        const collections = ['historicalMatches', 'team_style_profiles', 'analysis_cache'];
+        for (const col of collections) {
+            try {
+                const q = query(collection(db, col));
+                const snap = await getDocsFromServer(q);
+                const batch = writeBatch(db);
+                snap.docs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            } catch (error) {
+                console.error(`Failed to clear collection ${col}:`, error);
+            }
+        }
+    }
 }

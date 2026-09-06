@@ -31,4 +31,15 @@ export class Logger {
             return content.split('\n').filter(Boolean).slice(-lines);
         } catch { return ['No logs found for today']; }
     }
+
+    static clearLogs() {
+        try {
+            if (fs.existsSync(LOG_DIR)) {
+                const files = fs.readdirSync(LOG_DIR);
+                for (const file of files) {
+                    fs.unlinkSync(path.join(LOG_DIR, file));
+                }
+            }
+        } catch {}
+    }
 }
