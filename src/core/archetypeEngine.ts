@@ -4,8 +4,20 @@ import { LEAGUE_CONVERSION_RATES } from './constants';
 
 export class ArchetypeEngine {
     /**
-     * Computes archetype stats dynamically from a set of matches.
-     * This ensures fallbacks are calibrated to the current league/season environment.
+     * Compute archetypes from PRIOR data only (not the current dataset).
+     * This breaks the circularity of shrinking toward the same data you're analyzing.
+     */
+    static computeFromPrior(priorMatches: MatchHistory[]): typeof ARCHETYPE_STATS {
+        if (!priorMatches || priorMatches.length < 50) {
+            return ARCHETYPE_STATS;
+        }
+        // Same logic as compute(), but called with a separate prior dataset
+        return this.compute(priorMatches);
+    }
+
+    /**
+     * Original method - now clearly marked as fallback only.
+     * Use computeFromPrior() when possible.
      */
     static compute(matches: MatchHistory[]): typeof ARCHETYPE_STATS {
         if (!matches || matches.length < 50) {

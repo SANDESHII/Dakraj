@@ -78,8 +78,10 @@ export interface MatchContext {
     audit?:{ signalIntegrity:string; sampleSize:number; }; 
     intel?: MatchIntel; 
     dataQuality?: DataQualityReport;
+    homeDefRank?: number;
+    awayDefRank?: number;
 }
-export interface MatchHistory { homeTeam:string; awayTeam:string; homeGoals:number; awayGoals:number; homeXG?:number; awayXG?:number; homeShotsOnTarget?:number; awayShotsOnTarget?:number; homeRedCards?:number; awayRedCards?:number; date:string; league?:string; weight?:number; isVerified?: boolean; }
+export interface MatchHistory { homeTeam:string; awayTeam:string; homeGoals:number; awayGoals:number; homeXG?:number; awayXG?:number; homeShotsOnTarget?:number; awayShotsOnTarget?:number; homeRedCards?:number; awayRedCards?:number; date:string; league?:string; weight:number; isVerified?: boolean; }
 export interface AnalysisResult { probability:number; summary:string; homeStats:TeamStats; awayStats:TeamStats; homeXG:number; awayXG:number; predictionType:'OVER_15'|'UNDER_35'|'NO_BET'; predictionLabel:string; purity:number; signalStrength:number; marketOdds:number; marketImpliedProb:number; edge:number; verdict:'EXECUTE_BET'|'NO_BET'; context:MatchContext; dataSource:'LIVE'|'FALLBACK_STATIC' | 'BLOCKED_LOW_QUALITY'; dataQuality?: DataQualityReport; }
 
 export interface DataQualityReport {

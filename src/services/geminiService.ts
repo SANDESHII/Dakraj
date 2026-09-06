@@ -35,13 +35,17 @@ const AI_SCHEMA = {
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-const getFallback = async (req: { homeTeam: string; awayTeam: string; league: string; homeTeamName: string; awayTeamName: string; kickoff?: string }, matches: MatchHistory[], rho: RhoData): Promise<AnalysisResult> => {
+const getFallback = async (req: { homeTeam: string; awayTeam: string; league: string; homeTeamName: string; awayTeamName: string; kickoff?: string }, matches: MatchHistory[], rho: RhoData, defensiveRanks?: Record<string, number>): Promise<AnalysisResult> => {
     const asOf = (req.kickoff && req.kickoff !== 'UPCOMING') ? req.kickoff : undefined;
     return { 
         ...MatchEngine.calculate(
             DataService.standardize({ ...ProfileService.computeBaseline(req.homeTeam, matches, asOf), name: req.homeTeamName }), 
             DataService.standardize({ ...ProfileService.computeBaseline(req.awayTeam, matches, asOf), name: req.awayTeamName }), 
-            { league: req.league }, 
+            { 
+                league: req.league,
+                homeDefRank: defensiveRanks?.[req.homeTeam],
+                awayDefRank: defensiveRanks?.[req.awayTeam]
+            }, 
             rho
         ), 
         dataSource: 'FALLBACK_STATIC' 
@@ -83,7 +87,7 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
     const quality = DataQuality.validate(intel, homeXGData, awayXGData, scrapedOdds, homeForm, awayForm, req.kickoff);
     
     if (!quality.shouldProceed) {
-        const fallback = await getFallback(req, matches, rho);
+        const fallback = await getFallback(req, matches, rho, ctx.defensiveRanks);
         return {
             ...fallback,
             summary: `[QUALITY BLOCKED] Analysis halted due to unreliable data: ${quality.warnings.join(' ')}`,
@@ -154,7 +158,9 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
                 },
                 groundingLog: { citations: p.verifiedFacts?.citations || [], varianceAlerts: p.verifiedFacts?.varianceAlerts || [] },
                 intel: intel || undefined,
-                dataQuality: quality
+                dataQuality: quality,
+                homeDefRank: ctx.defensiveRanks?.[req.homeTeam],
+                awayDefRank: ctx.defensiveRanks?.[req.awayTeam]
             }, rho);
 
         // Append tactical intel to the math-driven summary
@@ -166,7 +172,7 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
         // Save to Persistent Cache
         await CacheService.set(key, res);
         return res;
-    } catch (e) { return getFallback(req, matches, rho); }
+    } catch (e) { return getFallback(req, matches, rho, ctx.defensiveRanks); }
 };
 
 

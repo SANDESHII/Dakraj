@@ -29,8 +29,13 @@ export class ProfileService {
             return hId === id || aId === id;
         });
 
-        // 1. Compute Dynamic Archetypes from the current dataset
-        const dyn = ArchetypeEngine.compute(history);
+        // 1. Compute Dynamic Archetypes from PRIOR data (excluding the team being analyzed)
+        const priorMatches = history.filter(m => {
+            const hId = this.canonicalize(m.homeTeam).id;
+            const aId = this.canonicalize(m.awayTeam).id;
+            return hId !== id && aId !== id;
+        });
+        const dyn = ArchetypeEngine.computeFromPrior(priorMatches);
 
         // 2. Identify the team's ranking score
         const teamScores: Record<string, number> = {};

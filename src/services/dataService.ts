@@ -16,7 +16,8 @@ export class DataService {
         const final = weighted.map(m => {
             const hW = this.calculateOpponentAdjustedWeight(m.homeGoals, m.awayGoals, m.awayTeam, traits.defensiveRanks);
             const aW = this.calculateOpponentAdjustedWeight(m.awayGoals, m.homeGoals, m.homeTeam, traits.defensiveRanks);
-            return { ...m, weight: (m.weight || 1.0) * Math.max(hW, aW) };
+            const mWeight = typeof m.weight === 'number' && m.weight > 0 ? m.weight : 1.0;
+            return { ...m, weight: mWeight * Math.max(hW, aW) };
         });
 
         return { 
@@ -30,7 +31,14 @@ export class DataService {
         try {
             const q = query(collection(db, COLLECTION), where('league', '==', league), orderBy('date', 'desc'), limit(DATA_CONSTANTS.MATCH_LIMIT));
             const snap = await getDocsFromServer(q);
-            const verifiedMatches = snap.docs.map(d => ({ ...d.data(), isVerified: true } as MatchHistory));
+            const verifiedMatches = snap.docs.map(d => {
+                const data = d.data();
+                return { 
+                    ...data, 
+                    isVerified: true,
+                    weight: typeof data.weight === 'number' ? data.weight : 1.0
+                } as MatchHistory;
+            });
 
             if (verifiedMatches.length < DATA_CONSTANTS.SYNC_THRESHOLD) {
                 const externalMatches = await FootballDataProvider.fetchBacklog(league, 2);
@@ -110,7 +118,10 @@ export class DataService {
         return {
             avgHG: aH, avgAG: aA, varHG: vH, varAG: vA,
             rhoData: {
-                ...DixonColes.fitRho(matches.slice(-DATA_CONSTANTS.RHO_SAMPLE_SIZE).map(m => ({ x: m.homeGoals, y: m.awayGoals, lambda: m.homeXG || aH, mu: m.awayXG || aA, weight: m.weight || 1.0 }))),
+                ...DixonColes.fitRho(matches.slice(-DATA_CONSTANTS.RHO_SAMPLE_SIZE).map(m => {
+                    const mWeight = typeof m.weight === 'number' && m.weight > 0 ? m.weight : 1.0;
+                    return { x: m.homeGoals, y: m.awayGoals, lambda: m.homeXG || aH, mu: m.awayXG || aA, weight: mWeight };
+                })),
             }
         };
     }

@@ -29,7 +29,8 @@ export class FootballDataProvider {
             homeShotsOnTarget: hst, awayShotsOnTarget: ast,
             homeRedCards: this.sanitize(row.HR ?? row.homeRedCards),
             awayRedCards: this.sanitize(row.AR ?? row.awayRedCards),
-            league
+            league,
+            weight: 1.0
         };
     }
 

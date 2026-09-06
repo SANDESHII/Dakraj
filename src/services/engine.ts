@@ -1,6 +1,6 @@
 import { TeamStats, MatchContext, AnalysisResult } from '../types';
 import { DixonColes } from '../core/math';
-import { DATA_CONSTANTS, LEAGUE_CONFIGS, BAYESIAN_CONFIG } from '../core/constants';
+import { DATA_CONSTANTS, LEAGUE_CONFIGS, LEAGUE_CONVERSION_RATES } from '../core/constants';
 
 export class MatchEngine {
     static calculate(
@@ -25,11 +25,19 @@ export class MatchEngine {
         const hXGA = context.homeSeasonXGA || home.avgXGA;
         const aXGA = context.awaySeasonXGA || away.avgXGA;
 
-        const hD = (hXGA / lAvg);
-        const aD = (aXGA / lAvg);
+        // NEW: Apply opponent defensive adjustment
+        // awayDefRank: 0 = best defense, 1 = worst defense
+        // We want: if opponent has strong defense, reduce expected goals
+        const awayDefFactor = context.awayDefRank != null
+            ? 1 - (0.3 * (1 - context.awayDefRank))  // Strong defense reduces λ by up to 30%
+            : (aXGA / lAvg); // Default to opponent's goals conceded strength
+        
+        const homeDefFactor = context.homeDefRank != null
+            ? 1 - (0.3 * (1 - context.homeDefRank))
+            : (hXGA / lAvg);
 
-        let hL = lAvg * (hA / lAvg) * aD * (1 + config.homeAdvantage / lAvg) * config.goalRate;
-        let aM = lAvg * (aA / lAvg) * hD * config.goalRate;
+        let hL = lAvg * (hA / lAvg) * awayDefFactor * (1 + config.homeAdvantage / lAvg) * config.goalRate;
+        let aM = lAvg * (aA / lAvg) * homeDefFactor * config.goalRate;
 
         // Step 2: Build Dixon-Coles score matrix
         const matrix = DixonColes.calculateScoreMatrix(hL, aM, rhoData.rho);
