@@ -153,7 +153,8 @@ export const performAnalysis = async (raw: { homeTeam: string; awayTeam: string;
                     pinnacleOver35: bestOdds?.pinnacleOver35 || p.verifiedFacts?.pinnacleOver35
                 },
                 groundingLog: { citations: p.verifiedFacts?.citations || [], varianceAlerts: p.verifiedFacts?.varianceAlerts || [] },
-                intel: intel || undefined
+                intel: intel || undefined,
+                dataQuality: quality
             }, rho);
 
         res.summary = p.matchSummary || res.summary;

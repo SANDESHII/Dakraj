@@ -12,6 +12,13 @@ export class MatchEngine {
         const config = LEAGUE_CONFIGS[context.league || 'EPL'] || LEAGUE_CONFIGS.STANDARD;
         const lAvg = DATA_CONSTANTS.DEFAULT_LEAGUE_AVG;
 
+        // Step 0: Calculate Signal Purity early for use in all branches
+        const extractionConfidence = context.dataQuality?.confidence ?? 100;
+        const historicalPurity = ((home.dataPurity || 1.0) + (away.dataPurity || 1.0)) / 2;
+        
+        // Final Signal Purity is a weighted blend of real-time extraction quality (70%) and historical sample volume (30%)
+        const purity = (extractionConfidence * 0.7) + (historicalPurity * 100 * 0.3);
+
         // Step 1: Calculate base expected goals from team strength
         const hA = context.homeSeasonXG || home.npxG;
         const aA = context.awaySeasonXG || away.npxG;
@@ -32,27 +39,58 @@ export class MatchEngine {
         const pU35_raw = DixonColes.calculateUnder35Probability(matrix);
 
         // Step 4: Remove market overround (vig)
-        const oddsO15 = context.marketOdds?.pinnacleOver15 || 1.50;
+        const oddsO15 = context.marketOdds?.pinnacleOver15;
+        const oddsU35 = context.marketOdds?.pinnacleUnder35;
+
+        // CRITICAL: If odds are missing, we cannot calculate edge. 
+        // We must not fall back to hardcoded numbers (AI Slop).
+        if (!oddsO15 && !oddsU35) {
+            return {
+                probability: Math.round(pO15_raw * 100),
+                summary: "Analysis incomplete: Real-time betting market odds could not be synchronized. Edge calculation suspended.",
+                homeStats: home,
+                awayStats: away,
+                homeXG: hL,
+                awayXG: aM,
+                predictionType: 'NO_BET',
+                predictionLabel: 'Market Data Missing',
+                marketOdds: 0,
+                marketImpliedProb: 0,
+                edge: 0,
+                verdict: 'NO_BET',
+                purity: purity,
+                signalStrength: pO15_raw,
+                context,
+                dataSource: 'BLOCKED_LOW_QUALITY'
+            };
+        }
+
+        // Use the one that is available, or safe default for the other if calculating specific type
+        const activeOddsO15 = oddsO15 || 1.01; 
+        const activeOddsU35 = oddsU35 || 1.01;
+
         const oddsU15 = context.marketOdds?.pinnacleUnder15;
-        const oddsU35 = context.marketOdds?.pinnacleUnder35 || 1.50;
         const oddsO35 = context.marketOdds?.pinnacleOver35;
 
         const computeOverround = (o1: number, o2?: number) => {
-            if (o2) return (1 / o1 + 1 / o2) - 1;
-            return 0.04; // Conservative fallback
+            if (o2 && o1 > 0 && o2 > 0) return (1 / o1 + 1 / o2) - 1;
+            return 0.05; // Slightly more conservative 5% fallback for single-sided odds
         };
 
-        const overroundO15 = computeOverround(oddsO15, oddsU15);
-        const overroundU35 = computeOverround(oddsU35, oddsO35);
+        const overroundO15 = computeOverround(activeOddsO15, oddsU15);
+        const overroundU35 = computeOverround(activeOddsU35, oddsO35);
 
-        const mP_O15_raw = 1 / oddsO15;
-        const mP_U35_raw = 1 / oddsU35;
+        const mP_O15_raw = 1 / activeOddsO15;
+        const mP_U35_raw = 1 / activeOddsU35;
 
         const mPO15 = mP_O15_raw / (1 + overroundO15);
         const mPU35 = mP_U35_raw / (1 + overroundU35);
 
-        // Step 5: Simple Bayesian blend (one parameter: w)
-        const w = BAYESIAN_CONFIG.BASE_TRUST; // Fixed weight, no dynamic purity scaling
+        // Step 5: Bayesian blend with dynamic purity scaling
+        // Scale the base trust by purity. If purity is 50%, trust the model 50% less than base.
+        const purityScale = purity / 100;
+        const w = BAYESIAN_CONFIG.BASE_TRUST * purityScale; 
+        
         const pBlendedO15 = (pO15_raw * w) + (mPO15 * (1 - w));
         const pBlendedU35 = (pU35_raw * w) + (mPU35 * (1 - w));
 
@@ -62,7 +100,7 @@ export class MatchEngine {
 
         const type = edgeO15 > edgeU35 ? 'OVER_15' : 'UNDER_35';
         const p = type === 'OVER_15' ? pBlendedO15 : pBlendedU35;
-        const mOdds = type === 'OVER_15' ? oddsO15 : oddsU35;
+        const mOdds = (type === 'OVER_15' ? oddsO15 : oddsU35) || 0;
         const mP = type === 'OVER_15' ? mPO15 : mPU35;
         const rawEdge = type === 'OVER_15' ? edgeO15 : edgeU35;
 
@@ -84,7 +122,7 @@ export class MatchEngine {
             marketImpliedProb: Math.round(mP * 100),
             edge: Math.round(edge * 100),
             verdict: hasEdge ? 'EXECUTE_BET' : 'NO_BET',
-            purity: 100,
+            purity: purity,
             signalStrength: p,
             context,
             dataSource: 'LIVE'

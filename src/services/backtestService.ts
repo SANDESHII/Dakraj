@@ -57,7 +57,7 @@ export class BacktestService {
             highPurityBrierScore: hpC > 0 ? hpB / hpC : 0,
             highPurityMatches: hpC,
             edgeSegments: segments.map(s => ({ segment: s.segment, count: s.count, hitRate: s.count > 0 ? s.hits / s.count : 0, avgEdge: s.min / 100 })),
-            calibrationUsed: { baseTrust: BAYESIAN_CONFIG.BASE_TRUST, purityScale: 0 },
+            calibrationUsed: { baseTrust: BAYESIAN_CONFIG.BASE_TRUST, purityScale: 1.0 }, // 1.0 means full dynamic scaling enabled
             matches: results
         };
     }
